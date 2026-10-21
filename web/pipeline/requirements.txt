@@ -1,0 +1,3 @@
+numpy>=2
+pillow>=10
+pygrib>=2.1.5
