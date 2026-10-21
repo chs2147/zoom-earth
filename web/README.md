@@ -79,6 +79,18 @@ npm run build      # dist/ 정적 사이트 (data/는 따로 배포)
 
 GFS는 6시간마다(00/06/12/18Z) 새 실행이 나오고, 384시간까지 모두 공개되기까지 약 5시간 걸립니다. 정기적으로 `build`를 실행하면 최신 실행 2개만 보관합니다(`--keep`).
 
+## 배포 (GitHub Pages)
+
+`.github/workflows/typhoon-lens.yml`이 매시간(매시 17분) 다음을 실행합니다.
+1. 384시간까지 모두 공개된 최신 GFS 실행을 찾습니다.
+2. 그 실행의 프레임이 Actions 캐시에 있으면 재사용하고, 없으면 새로 만듭니다. 새로 만드는 일은 6시간마다 한 번, 약 10분 걸립니다.
+3. JTWC·NHC 공식 경보를 갱신합니다. 실패해도 배포는 계속됩니다.
+4. 웹 앱을 빌드하고 GitHub Pages에 배포합니다.
+
+처음 한 번은 저장소 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 설정해야 합니다. 배포 주소는 `https://<사용자>.github.io/zoom-earth/`입니다.
+
+수동 실행: **Actions → Deploy Typhoon Lens → Run workflow**.
+
 ## 열대저기압 추적 방식
 
 `tracker.py`가 다음 순서로 진로를 만듭니다.
