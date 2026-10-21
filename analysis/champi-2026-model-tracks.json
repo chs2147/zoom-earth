@@ -1,0 +1,287 @@
+{
+  "storm": "champi-2026",
+  "title": "Typhoon Champi (Rosal)",
+  "agencies": "JTWC",
+  "run": "2026-10-20T18Z",
+  "method": {
+    "zoom": 3,
+    "search_radius_deg": 4.0,
+    "wind_radius_deg": 3.0
+  },
+  "agency_track": [
+    {
+      "valid": "2026-10-20T18:00Z",
+      "lat": 17.4,
+      "lon": 131.5,
+      "wind_kt": 160,
+      "pressure_hpa": 895,
+      "forecast": false
+    },
+    {
+      "valid": "2026-10-21T00:00Z",
+      "lat": 18.1,
+      "lon": 130.1,
+      "wind_kt": 155,
+      "pressure_hpa": 902,
+      "forecast": false
+    },
+    {
+      "valid": "2026-10-21T12:00Z",
+      "lat": 19.3,
+      "lon": 128,
+      "wind_kt": 145,
+      "pressure_hpa": null,
+      "forecast": true
+    },
+    {
+      "valid": "2026-10-22T00:00Z",
+      "lat": 20.5,
+      "lon": 126.3,
+      "wind_kt": 130,
+      "pressure_hpa": null,
+      "forecast": true
+    },
+    {
+      "valid": "2026-10-22T12:00Z",
+      "lat": 21.6,
+      "lon": 125.1,
+      "wind_kt": 120,
+      "pressure_hpa": null,
+      "forecast": true
+    },
+    {
+      "valid": "2026-10-23T00:00Z",
+      "lat": 23.1,
+      "lon": 124.1,
+      "wind_kt": 115,
+      "pressure_hpa": null,
+      "forecast": true
+    },
+    {
+      "valid": "2026-10-23T12:00Z",
+      "lat": 24.9,
+      "lon": 123.5,
+      "wind_kt": 105,
+      "pressure_hpa": null,
+      "forecast": true
+    },
+    {
+      "valid": "2026-10-24T00:00Z",
+      "lat": 26.8,
+      "lon": 123.6,
+      "wind_kt": 85,
+      "pressure_hpa": null,
+      "forecast": true
+    },
+    {
+      "valid": "2026-10-25T00:00Z",
+      "lat": 31.4,
+      "lon": 127.1,
+      "wind_kt": 55,
+      "pressure_hpa": null,
+      "forecast": true
+    },
+    {
+      "valid": "2026-10-26T00:00Z",
+      "lat": 34.7,
+      "lon": 134,
+      "wind_kt": 40,
+      "pressure_hpa": null,
+      "forecast": true
+    }
+  ],
+  "models": {
+    "gfs": [
+      {
+        "hour": 0,
+        "valid": "2026-10-20T18:00Z",
+        "lat": 17.56,
+        "lon": 131.57,
+        "mslp_hpa": 915.5,
+        "max_wind_10m": 57.9,
+        "agency_distance_km": 19
+      },
+      {
+        "hour": 6,
+        "valid": "2026-10-21T00:00Z",
+        "lat": 18.06,
+        "lon": 130.17,
+        "mslp_hpa": 914.5,
+        "max_wind_10m": 57.5,
+        "agency_distance_km": 9
+      },
+      {
+        "hour": 12,
+        "valid": "2026-10-21T06:00Z",
+        "lat": 18.73,
+        "lon": 129.11,
+        "mslp_hpa": 913.0,
+        "max_wind_10m": 59.8
+      },
+      {
+        "hour": 18,
+        "valid": "2026-10-21T12:00Z",
+        "lat": 19.39,
+        "lon": 128.06,
+        "mslp_hpa": 916.5,
+        "max_wind_10m": 53.4,
+        "agency_distance_km": 12
+      },
+      {
+        "hour": 24,
+        "valid": "2026-10-21T18:00Z",
+        "lat": 19.89,
+        "lon": 127.0,
+        "mslp_hpa": 918.0,
+        "max_wind_10m": 55.4
+      },
+      {
+        "hour": 30,
+        "valid": "2026-10-22T00:00Z",
+        "lat": 20.06,
+        "lon": 126.3,
+        "mslp_hpa": 922.0,
+        "max_wind_10m": 53.5,
+        "agency_distance_km": 49
+      },
+      {
+        "hour": 36,
+        "valid": "2026-10-22T06:00Z",
+        "lat": 20.72,
+        "lon": 125.77,
+        "mslp_hpa": 923.0,
+        "max_wind_10m": 52.7
+      },
+      {
+        "hour": 42,
+        "valid": "2026-10-22T12:00Z",
+        "lat": 20.88,
+        "lon": 124.89,
+        "mslp_hpa": 928.5,
+        "max_wind_10m": 51.3,
+        "agency_distance_km": 83
+      },
+      {
+        "hour": 48,
+        "valid": "2026-10-22T18:00Z",
+        "lat": 21.37,
+        "lon": 124.37,
+        "mslp_hpa": 932.0,
+        "max_wind_10m": 51.5
+      },
+      {
+        "hour": 54,
+        "valid": "2026-10-23T00:00Z",
+        "lat": 22.19,
+        "lon": 123.66,
+        "mslp_hpa": 940.0,
+        "max_wind_10m": 51.6,
+        "agency_distance_km": 111
+      },
+      {
+        "hour": 58,
+        "valid": "2026-10-23T04:00Z",
+        "lat": 22.35,
+        "lon": 122.78,
+        "mslp_hpa": 942.5,
+        "max_wind_10m": 49.7
+      }
+    ],
+    "icon": [
+      {
+        "hour": 0,
+        "valid": "2026-10-20T18:00Z",
+        "lat": 17.22,
+        "lon": 131.57,
+        "mslp_hpa": 920.0,
+        "max_wind_10m": 46.9,
+        "agency_distance_km": 21
+      },
+      {
+        "hour": 6,
+        "valid": "2026-10-21T00:00Z",
+        "lat": 17.9,
+        "lon": 130.34,
+        "mslp_hpa": 924.0,
+        "max_wind_10m": 48.1,
+        "agency_distance_km": 34
+      },
+      {
+        "hour": 12,
+        "valid": "2026-10-21T06:00Z",
+        "lat": 18.56,
+        "lon": 129.11,
+        "mslp_hpa": 918.0,
+        "max_wind_10m": 44.9
+      },
+      {
+        "hour": 18,
+        "valid": "2026-10-21T12:00Z",
+        "lat": 19.23,
+        "lon": 128.23,
+        "mslp_hpa": 922.0,
+        "max_wind_10m": 44.3,
+        "agency_distance_km": 25
+      },
+      {
+        "hour": 24,
+        "valid": "2026-10-21T18:00Z",
+        "lat": 19.73,
+        "lon": 127.18,
+        "mslp_hpa": 922.5,
+        "max_wind_10m": 43.4
+      },
+      {
+        "hour": 30,
+        "valid": "2026-10-22T00:00Z",
+        "lat": 20.22,
+        "lon": 126.47,
+        "mslp_hpa": 924.0,
+        "max_wind_10m": 41.9,
+        "agency_distance_km": 36
+      },
+      {
+        "hour": 36,
+        "valid": "2026-10-22T06:00Z",
+        "lat": 20.72,
+        "lon": 125.95,
+        "mslp_hpa": 922.0,
+        "max_wind_10m": 41.6
+      },
+      {
+        "hour": 42,
+        "valid": "2026-10-22T12:00Z",
+        "lat": 21.04,
+        "lon": 125.6,
+        "mslp_hpa": 925.0,
+        "max_wind_10m": 41.2,
+        "agency_distance_km": 81
+      },
+      {
+        "hour": 48,
+        "valid": "2026-10-22T18:00Z",
+        "lat": 21.7,
+        "lon": 125.07,
+        "mslp_hpa": 926.5,
+        "max_wind_10m": 40.6
+      },
+      {
+        "hour": 54,
+        "valid": "2026-10-23T00:00Z",
+        "lat": 22.51,
+        "lon": 124.37,
+        "mslp_hpa": 930.0,
+        "max_wind_10m": 40.7,
+        "agency_distance_km": 71
+      },
+      {
+        "hour": 58,
+        "valid": "2026-10-23T04:00Z",
+        "lat": 22.84,
+        "lon": 123.84,
+        "mslp_hpa": 930.0,
+        "max_wind_10m": 45.2
+      }
+    ]
+  }
+}

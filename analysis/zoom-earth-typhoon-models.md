@@ -35,7 +35,7 @@ Zoom Earth의 태풍 화면은 서로 다른 두 데이터 계층을 겹쳐서 �
 | 데이터 없음 | `https://tiles.zoom.earth/{model}/{ver}/{layer}/blank.png` | 관측 |
 | 서버 시각, 핑, 공지 | `/data/time/`, `/data/ping/`, `/data/notices/`, `/data/outages/` | 관측 |
 | 지점 예보 | `https://api.zoom.earth/weather/` | 정적만 확인. 이번 시나리오에서는 호출되지 않음 |
-| 유료(Pro) 시각 색인 | `https://tiles.zoom.earth/times/pro/{model}.json?token=...` | 정적만 확인. 유료 토큰이 있을 때만 사용 |
+| 유료(Pro) 시각 색인 | `https://tiles.zoom.earth/times/pro/{model}.json?token=...` | 정적 확인. 토큰 없이 요청하면 403(관측). Pro는 최대 15일 예보(사용자 제보). `zoom-earth-features.md` 참고 |
 
 관측 예시:
 - `gfs/v1/wind-speed/webp/10m/2026-10-20/1800/f009/3/3/6.webp`
