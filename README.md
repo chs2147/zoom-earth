@@ -37,7 +37,7 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 | 태풍 | JTWC·NHC 공식 예보 진로·강풍 반경·불확실성 범위, 모델 자동 추적 진로, 시각별 상세 표 |
 | 관측 | 위성(NASA GIBS VIIRS), 강수 레이더(RainViewer), 산불 열점 |
 | 사용성 | 타임라인 재생, 도시별 값·풍향, 바람 흐름 애니메이션, 공유 링크, 풍속 단위 설정, 모바일 화면 |
-| 자동 갱신 | Vercel 운영 서버가 10분마다(cron-job.org 호출) 모델별 새 실행을 확인해 배포를 시작하고, 1시간마다 공식 경보를 갱신. 변환·배포는 GitHub Actions → GitHub Pages |
+| 자동 갱신 | 운영 서버(Railway 상시 실행)가 10분마다 모델별 새 실행을 확인해 배포를 시작하고, 1시간마다 공식 경보를 갱신. 변환·배포는 GitHub Actions → GitHub Pages |
 | 운영 관리 | 관리 화면에서 모델별 상태(배포된 실행·원본 최신 실행·다음 실행 예상), 최근 배포 작업, 지금 점검·재배포·재시도 |
 
 자세한 구조와 실행 방법은 [`web/README.md`](web/README.md), 운영 서버는 [`web/control/README.md`](web/control/README.md)에 있습니다. 앞으로 할 일(한국 KIM·일본 GSM 모델 추가 등)은 [`ROADMAP.md`](ROADMAP.md)에 있습니다.

@@ -2,7 +2,7 @@
 
 ## 진행 중
 
-- **운영 서버(Vercel)**: 모델별 새 실행 감지, 배포 시작, 재시도, 관리 화면 ([`web/control/`](web/control/README.md))
+- **운영 서버(Railway 상시 실행, Vercel 겸용)**: 모델별 새 실행 감지, 배포 시작, 재시도, 관리 화면 ([`web/control/`](web/control/README.md))
 
 ## 다음 할 일
 
