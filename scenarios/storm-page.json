@@ -1,0 +1,16 @@
+{
+  "browser": {
+    "mode": "connect",
+    "cdp_endpoint": "http://127.0.0.1:9222",
+    "target_id": "REPLACE_WITH_TARGET_ID"
+  },
+  "start_url": { "url": "https://zoom.earth/storms/" },
+  "actions": [
+    { "step_id": "settle", "action": "wait_for_timeout", "duration_ms": 12000 }
+  ],
+  "capture": {
+    "at_end": ["url"],
+    "events": ["network", "console", "page-errors"],
+    "network": { "response_body": true }
+  }
+}
