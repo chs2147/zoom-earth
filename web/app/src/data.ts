@@ -56,6 +56,43 @@ export interface Run {
   storms: Storms;
 }
 
+export interface OfficialPoint {
+  time: string;
+  lat: number;
+  lon: number;
+  wind_kt: number | null;
+}
+
+export interface OfficialForecastPoint extends OfficialPoint {
+  hour: number;
+  radii_nm: Record<string, number[]>;
+}
+
+export interface OfficialStorm {
+  id: string;
+  agency: string;
+  kind: "warning" | "alert" | "advisory";
+  source: string;
+  number: string;
+  name: string | null;
+  type: string;
+  warning?: number;
+  issued: string;
+  position: OfficialPoint;
+  history: OfficialPoint[];
+  forecast: OfficialForecastPoint[];
+  remarks: string[];
+  cone: [number, number][] | null;
+  wind_field: Record<string, [number, number][]> | null;
+}
+
+export interface Official {
+  generated: string;
+  cone_note: string;
+  storms: OfficialStorm[];
+  errors: string[];
+}
+
 const DATA_URL: string = import.meta.env.VITE_DATA_URL ?? "./data/";
 
 async function json<T>(url: string): Promise<T> {
@@ -78,4 +115,13 @@ export async function loadLatestRun(model = "gfs"): Promise<Run> {
 
 export function frameUrl(run: Run, layer: string, hour: number): string {
   return run.base + run.manifest.frame.replace("{layer}", layer).replace("{hour}", String(hour).padStart(3, "0"));
+}
+
+// Official warnings are optional; a missing or broken file shows none.
+export async function loadOfficial(): Promise<Official | null> {
+  try {
+    return await json<Official>(`${DATA_URL}official.json`);
+  } catch {
+    return null;
+  }
 }

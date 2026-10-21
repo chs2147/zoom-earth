@@ -3,11 +3,20 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
 import { baseStyle, OVERLAYS, PLACES } from "./basemap";
-import { loadLatestRun, type LayerInfo, type Run, type Track } from "./data";
+import { loadLatestRun, loadOfficial, type LayerInfo, type OfficialStorm, type Run, type Track } from "./data";
 import { FieldLayer } from "./fieldLayer";
 import { FrameCache, sampleFrame, type Frame } from "./frames";
 import { cssGradient, SCALES, scaleCoordinate } from "./palettes";
-import { category, knots, positionAt, trackFeatures } from "./storms";
+import {
+  category,
+  categoryKt,
+  knots,
+  matchOfficial,
+  officialFeatures,
+  officialTitle,
+  positionAt,
+  trackFeatures,
+} from "./storms";
 
 const HOUR = 3600 * 1000;
 const PLAY_HOURS_PER_SECOND = 6;
@@ -20,9 +29,12 @@ const state = {
   playing: false,
   overlays: new Set<string>(),
   storms: true,
+  official: true,
   frames: null as [Frame, Frame] | null,
   ratio: 0,
 };
+
+const shortTime = new Intl.DateTimeFormat("ko-KR", { day: "numeric", hour: "numeric", hour12: false });
 
 const timeFormat = new Intl.DateTimeFormat("ko-KR", {
   month: "numeric",
@@ -51,8 +63,27 @@ function formatValue(layer: LayerInfo, values: number[]): string {
   return `${values[0].toFixed(digits)} ${layer.unit}`;
 }
 
+// JTWC amplifying remarks such as "120HR BECOMING EXTRATROPICAL".
+const REMARK_PHRASES: [RegExp, string][] = [
+  [/BECOMING EXTRATROPICAL/, "온대저기압으로 변질"],
+  [/COMPLETED? EXTRATROPICAL TRANSITION/, "온대저기압으로 변질 완료"],
+  [/DISSIPATING AS A SIGNIFICANT TROPICAL CYCLONE OVER WATER/, "해상에서 약화·소멸 중"],
+  [/DISSIPATED AS A SIGNIFICANT TROPICAL CYCLONE OVER WATER/, "해상에서 소멸"],
+  [/DISSIPATING AS A SIGNIFICANT TROPICAL CYCLONE OVER LAND/, "육상에서 약화·소멸 중"],
+  [/DISSIPATED AS A SIGNIFICANT TROPICAL CYCLONE OVER LAND/, "육상에서 소멸"],
+  [/OVER LAND/, "육상 통과"],
+];
+
+function translateRemark(remark: string): string {
+  const match = /^(\d+)HR\s+(.*)$/.exec(remark);
+  const [hours, phrase] = match ? [Number(match[1]), match[2]] : [null, remark];
+  const korean = REMARK_PHRASES.find(([pattern]) => pattern.test(phrase))?.[1] ?? phrase.toLowerCase();
+  return hours === null ? korean : `${hours}시간 후 ${korean}`;
+}
+
 async function start(): Promise<void> {
   const style = baseStyle();
+  const officialData = loadOfficial();
   let run: Run;
   try {
     run = await loadLatestRun();
@@ -88,7 +119,7 @@ async function start(): Promise<void> {
   map.addControl(
     new maplibregl.AttributionControl({
       compact: true,
-      customAttribution: `${manifest.attribution} · Natural Earth`,
+      customAttribution: `${manifest.attribution} · JTWC · NHC · Natural Earth`,
     }),
     "bottom-right",
   );
@@ -130,6 +161,103 @@ async function start(): Promise<void> {
     },
   });
 
+  // Official warnings: cone and wind radii under the tracks, lines above.
+  const official = (await officialData)?.storms ?? [];
+  map.addSource("official", { type: "geojson", data: officialFeatures(official) });
+  map.addLayer(
+    {
+      id: "official-cone",
+      type: "fill",
+      source: "official",
+      filter: ["==", ["get", "kind"], "cone"],
+      paint: { "fill-color": "#ffffff", "fill-opacity": 0.1, "fill-outline-color": "rgba(255,255,255,0.5)" },
+    },
+    "track-lines",
+  );
+  map.addLayer(
+    {
+      id: "official-wind",
+      type: "fill",
+      source: "official",
+      filter: ["==", ["get", "kind"], "wind"],
+      paint: { "fill-color": ["get", "color"], "fill-opacity": 0.22 },
+    },
+    "track-lines",
+  );
+  map.addLayer({
+    id: "official-history",
+    type: "line",
+    source: "official",
+    filter: ["==", ["get", "kind"], "history"],
+    paint: { "line-color": "#c9ced6", "line-width": 2 },
+    layout: { "line-cap": "round", "line-join": "round" },
+  });
+  map.addLayer({
+    id: "official-forecast",
+    type: "line",
+    source: "official",
+    filter: ["==", ["get", "kind"], "forecast"],
+    paint: { "line-color": "#ffffff", "line-width": 2, "line-dasharray": [2, 1.5] },
+    layout: { "line-cap": "round", "line-join": "round" },
+  });
+  map.addLayer({
+    id: "official-points",
+    type: "circle",
+    source: "official",
+    filter: ["==", ["get", "kind"], "forecast-point"],
+    paint: {
+      "circle-radius": 5,
+      "circle-color": ["get", "color"],
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1.5,
+    },
+  });
+  const OFFICIAL_LAYERS = ["official-cone", "official-wind", "official-history", "official-forecast", "official-points"];
+
+  const officialMarkers: maplibregl.Marker[] = [];
+  for (const storm of official) {
+    const cat = categoryKt(storm.position.wind_kt ?? 0);
+    const element = document.createElement("button");
+    element.className = "official-marker";
+    element.style.setProperty("--storm-color", cat.color);
+    const wind = storm.position.wind_kt != null ? ` · ${storm.position.wind_kt} kt` : "";
+    element.innerHTML = `<span class="storm-icon" aria-hidden="true"></span><span class="official-label">${officialTitle(storm)}${wind}</span>`;
+    element.setAttribute("aria-label", `${storm.agency} ${officialTitle(storm)}${wind}`);
+    element.addEventListener("click", () => showOfficial(storm));
+    // Label above the icon so it does not collide with the model marker's label.
+    officialMarkers.push(
+      new maplibregl.Marker({ element, anchor: "bottom", offset: [0, 11] })
+        .setLngLat([storm.position.lon, storm.position.lat])
+        .addTo(map),
+    );
+    for (const point of storm.forecast.slice(1)) {
+      const label = document.createElement("div");
+      label.className = "forecast-time";
+      label.textContent = shortTime.format(Date.parse(point.time));
+      officialMarkers.push(new maplibregl.Marker({ element: label, anchor: "left", offset: [8, 0] }).setLngLat([point.lon, point.lat]).addTo(map));
+    }
+  }
+
+  function setOfficialVisible(visible: boolean): void {
+    state.official = visible;
+    for (const id of OFFICIAL_LAYERS) map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
+    officialMarkers.forEach((marker) => (marker.getElement().hidden = !visible));
+  }
+
+  function showOfficial(storm: OfficialStorm): void {
+    const points = [...storm.history.slice(-8), ...storm.forecast, storm.position];
+    const lons = points.map((p) => p.lon);
+    const lats = points.map((p) => p.lat);
+    map.fitBounds(
+      [
+        [Math.min(...lons) - 3, Math.min(...lats) - 3],
+        [Math.max(...lons) + 3, Math.max(...lats) + 3],
+      ],
+      { padding: 60, duration: 800 },
+    );
+    $("#storms-panel").hidden = true;
+  }
+
   const stormMarkers = new Map<string, maplibregl.Marker>();
   function updateStormMarkers(): void {
     for (const track of tracks) {
@@ -145,13 +273,17 @@ async function start(): Promise<void> {
         const element = document.createElement("button");
         element.className = "storm-marker";
         element.addEventListener("click", () => showStorm(track));
-        marker = new maplibregl.Marker({ element }).setLngLat([position.lon, position.lat]).addTo(map);
+        // Anchor at the icon's centre (22px wide), not the icon-plus-label box.
+        marker = new maplibregl.Marker({ element, anchor: "left", offset: [-11, 0] })
+          .setLngLat([position.lon, position.lat])
+          .addTo(map);
         stormMarkers.set(track.id, marker);
       }
       marker.setLngLat([position.lon, position.lat]);
       const element = marker.getElement();
       element.style.setProperty("--storm-color", cat.color);
-      element.innerHTML = `<span class="storm-icon" aria-hidden="true"></span><span class="storm-label">${cat.label} · ${Math.round(position.mslp)} hPa</span>`;
+      const name = matched.get(track.id);
+      element.innerHTML = `<span class="storm-icon" aria-hidden="true"></span><span class="storm-label">GFS${name ? ` ${name}` : ""} · ${Math.round(position.mslp)} hPa</span>`;
       element.setAttribute("aria-label", `열대저기압 ${cat.label}, 중심기압 ${Math.round(position.mslp)} hPa`);
     }
   }
@@ -171,9 +303,28 @@ async function start(): Promise<void> {
 
   function renderStormList(): void {
     const list = $("#storm-list");
-    list.innerHTML = "";
+    list.innerHTML = `<li class="section">공식 예보 · JTWC/NHC</li>`;
+    if (official.length === 0) list.insertAdjacentHTML("beforeend", `<li class="empty">현재 발표 중인 공식 경보가 없습니다.</li>`);
+    official.forEach((storm) => {
+      const cat = categoryKt(storm.position.wind_kt ?? 0);
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      const issued = timeFormat.format(Date.parse(storm.issued));
+      const detail =
+        storm.kind === "warning"
+          ? `최대 ${storm.position.wind_kt} kt · ${storm.agency} 경보 ${storm.warning}호 · ${issued} 발표`
+          : `${storm.agency} · ${issued} 발표`;
+      button.innerHTML = `
+        <span class="swatch" style="background:${cat.color}"></span>
+        <span class="storm-title">${officialTitle(storm)}</span>
+        <span class="storm-meta">${detail}${storm.remarks.length ? `<br>${storm.remarks.map(translateRemark).join(" · ")}` : ""}</span>`;
+      button.addEventListener("click", () => showOfficial(storm));
+      item.append(button);
+      list.append(item);
+    });
+    list.insertAdjacentHTML("beforeend", `<li class="section">모델 예상 진로 · GFS</li>`);
     if (tracks.length === 0) {
-      list.innerHTML = `<li class="empty">이번 실행에서 감지된 열대저기압이 없습니다.</li>`;
+      list.insertAdjacentHTML("beforeend", `<li class="empty">이번 실행에서 감지된 열대저기압이 없습니다.</li>`);
       return;
     }
     tracks.forEach((track) => {
@@ -184,7 +335,7 @@ async function start(): Promise<void> {
       const button = document.createElement("button");
       button.innerHTML = `
         <span class="swatch" style="background:${cat.color}"></span>
-        <span class="storm-title">${cat.label} · 최저 ${Math.round(track.min_mslp)} hPa</span>
+        <span class="storm-title">${matched.get(track.id) ? `${matched.get(track.id)} · ` : ""}${cat.label} · 최저 ${Math.round(track.min_mslp)} hPa</span>
         <span class="storm-meta">최대 ${track.max_wind.toFixed(0)} m/s (${knots(track.max_wind)} kt) ·
         ${timeFormat.format(Date.parse(firstPoint.valid))} – ${timeFormat.format(Date.parse(lastPoint.valid))}</span>`;
       button.addEventListener("click", () => showStorm(track));
@@ -192,6 +343,12 @@ async function start(): Promise<void> {
       list.append(item);
     });
   }
+  const matched = new Map(
+    tracks.map((track) => {
+      const storm = matchOfficial(track, official);
+      return [track.id, storm ? (storm.name ?? storm.number) : undefined] as const;
+    }),
+  );
   renderStormList();
 
   // Forecast field rendering.
@@ -273,10 +430,15 @@ async function start(): Promise<void> {
   }
   overlayList.insertAdjacentHTML(
     "beforeend",
-    `<label class="option"><input type="checkbox" value="storms" checked> 열대저기압 진로<small>GFS 모델에서 추출 · 공식 예보 아님</small></label>`,
+    `<label class="option"><input type="checkbox" value="official" checked> 공식 태풍 예보<small>JTWC·NHC 경보 · 원은 근사 불확실성 범위</small></label>
+     <label class="option"><input type="checkbox" value="storms" checked> 모델 예상 진로<small>GFS에서 자동 추출 · 공식 예보 아님</small></label>`,
   );
   overlayList.addEventListener("change", async (event) => {
     const input = event.target as HTMLInputElement;
+    if (input.value === "official") {
+      setOfficialVisible(input.checked);
+      return;
+    }
     if (input.value === "storms") {
       state.storms = input.checked;
       const visibility = input.checked ? "visible" : "none";

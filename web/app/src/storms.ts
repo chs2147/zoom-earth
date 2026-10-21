@@ -2,7 +2,7 @@
 // classes, and the storm's interpolated position at the selected time.
 
 import type { FeatureCollection } from "geojson";
-import type { Track, TrackPoint } from "./data";
+import type { OfficialStorm, Track } from "./data";
 
 const MS_TO_KT = 1.943844;
 
@@ -23,7 +23,10 @@ const CATEGORIES: [number, Category][] = [
 ];
 
 export function category(windMs: number): Category {
-  const kt = windMs * MS_TO_KT;
+  return categoryKt(windMs * MS_TO_KT);
+}
+
+export function categoryKt(kt: number): Category {
   return CATEGORIES.find(([threshold]) => kt >= threshold)![1];
 }
 
@@ -32,7 +35,7 @@ export function knots(windMs: number): number {
 }
 
 // Longitudes made continuous so lines do not jump across the antimeridian.
-function unwrapped(points: TrackPoint[]): number[] {
+function unwrapped(points: { lon: number }[]): number[] {
   const lons: number[] = [];
   points.forEach((p, i) => {
     if (i === 0) return lons.push(p.lon);
@@ -102,4 +105,75 @@ export function positionAt(track: Track, time: number): Position | null {
   }
   const last = points[points.length - 1];
   return { lat: last.lat, lon: lons[lons.length - 1], wind: last.wind, mslp: last.mslp };
+}
+
+const WIND_COLORS: Record<string, string> = { "34": "#f0d26b", "50": "#ef7d3c", "64": "#e04a4a" };
+
+// Official warnings: approximate cone, current wind radii, past and forecast track.
+export function officialFeatures(storms: OfficialStorm[]): FeatureCollection {
+  const features: FeatureCollection["features"] = [];
+  for (const storm of storms) {
+    if (storm.cone) {
+      features.push({
+        type: "Feature",
+        properties: { kind: "cone", storm: storm.id },
+        geometry: { type: "Polygon", coordinates: [storm.cone] },
+      });
+    }
+    for (const [kt, ring] of Object.entries(storm.wind_field ?? {})) {
+      features.push({
+        type: "Feature",
+        properties: { kind: "wind", kt: Number(kt), color: WIND_COLORS[kt] ?? "#f0d26b", storm: storm.id },
+        geometry: { type: "Polygon", coordinates: [ring] },
+      });
+    }
+    const history = storm.history;
+    if (history.length > 1) {
+      const lons = unwrapped(history);
+      features.push({
+        type: "Feature",
+        properties: { kind: "history", storm: storm.id },
+        geometry: { type: "LineString", coordinates: history.map((p, i) => [lons[i], p.lat]) },
+      });
+    }
+    const forecast = storm.forecast;
+    if (forecast.length > 1) {
+      const lons = unwrapped(forecast);
+      features.push({
+        type: "Feature",
+        properties: { kind: "forecast", storm: storm.id },
+        geometry: { type: "LineString", coordinates: forecast.map((p, i) => [lons[i], p.lat]) },
+      });
+      forecast.forEach((p, i) =>
+        features.push({
+          type: "Feature",
+          properties: { kind: "forecast-point", color: categoryKt(p.wind_kt ?? 0).color, storm: storm.id },
+          geometry: { type: "Point", coordinates: [lons[i], p.lat] },
+        }),
+      );
+    }
+  }
+  return { type: "FeatureCollection", features };
+}
+
+function distanceDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dlon = ((lon2 - lon1 + 540) % 360) - 180;
+  return Math.hypot(lat2 - lat1, dlon * Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180));
+}
+
+// The official storm a model track follows: the model position at the
+// warning's issue time lies within 3° of the official position.
+export function matchOfficial(track: Track, storms: OfficialStorm[]): OfficialStorm | undefined {
+  let best: [number, OfficialStorm] | undefined;
+  for (const storm of storms) {
+    const position = positionAt(track, Date.parse(storm.position.time));
+    if (!position) continue;
+    const distance = distanceDeg(position.lat, position.lon, storm.position.lat, storm.position.lon);
+    if (distance <= 3 && (!best || distance < best[0])) best = [distance, storm];
+  }
+  return best?.[1];
+}
+
+export function officialTitle(storm: OfficialStorm): string {
+  return storm.name ? `${storm.type} ${storm.name} (${storm.number})` : `${storm.number} ${storm.type}`;
 }
