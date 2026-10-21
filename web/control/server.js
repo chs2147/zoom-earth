@@ -6,7 +6,7 @@
 //   /                 dashboard (public/)
 //   /api/status       GET, read-only state
 //   /api/dispatch     POST, admin actions (ADMIN_TOKEN)
-//   /api/tick         GET, external trigger (CRON_SECRET)
+//   /api/tick         GET or POST, external trigger (CRON_SECRET)
 //   /api/scheduler    GET, when the in-process check last ran and its outcome
 //   /healthz          GET, liveness for the host
 
@@ -90,7 +90,7 @@ async function route(request) {
   if (pathname === "/healthz") return new Response("ok");
   if (pathname === "/api/scheduler" && method === "GET") return json(scheduler);
   if (pathname === "/api/status" && method === "GET") return statusRoute();
-  if (pathname === "/api/tick" && method === "GET") return tickRoute(request);
+  if (pathname === "/api/tick" && (method === "GET" || method === "POST")) return tickRoute(request);
   if (pathname === "/api/dispatch" && method === "POST") return dispatchRoute(request);
   if (pathname.startsWith("/api/")) return json({ error: "not found" }, 404);
   if (method === "GET") return (await staticFile(pathname)) ?? new Response("not found", { status: 404 });

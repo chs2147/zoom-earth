@@ -1,6 +1,7 @@
 // @ts-check
-// GET /api/tick: the scheduled check. Vercel Cron calls it with
-// `Authorization: Bearer $CRON_SECRET`; any other scheduler can do the same.
+// GET or POST /api/tick: the scheduled check. Vercel Cron (GET) calls it with
+// `Authorization: Bearer $CRON_SECRET`; schedulers that can only POST, such as
+// Upstash QStash, work too.
 // It starts the deploy workflow when a model has a new complete run or the
 // site has not been redeployed for an hour. `?dry=1` reports without acting.
 
@@ -17,3 +18,5 @@ export async function GET(request) {
     return failure(error);
   }
 }
+
+export const POST = GET;

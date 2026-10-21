@@ -47,7 +47,7 @@
 | 경로 | 인증 | 내용 |
 |---|---|---|
 | `GET /api/status` | 없음 | 모델·사이트·배포 상태(JSON). CDN에 60초 캐시 |
-| `GET /api/tick` | `Authorization: Bearer $CRON_SECRET` | 점검 후 필요하면 배포 시작. 외부 스케줄러와 Vercel Cron이 호출. `?dry=1`은 점검만 |
+| `GET`·`POST /api/tick` | `Authorization: Bearer $CRON_SECRET` | 점검 후 필요하면 배포 시작. 외부 스케줄러와 Vercel Cron이 호출. `?dry=1`은 점검만 |
 | `POST /api/dispatch` | `Authorization: Bearer $ADMIN_TOKEN` | `{"action":"check"}` 지금 점검, `{"action":"refresh"}` 지금 재배포, `{"action":"retry","model":"icon"}` 실패한 모델 다시 시도 |
 
 `/`는 관리 화면입니다. 상태를 1분마다 새로 고치고, 관리 토큰을 넣으면 위 동작을 버튼으로 실행합니다.
@@ -80,6 +80,14 @@
 5. 저장 후 **Test run**을 누릅니다. 응답이 200이고 JSON에 `models`가 있으면 정상입니다. 401이면 헤더 값이 `CRON_SECRET`과 다른 것입니다.
 
 같은 실행은 서버가 중복으로 시작하지 않으므로, 스케줄러가 여러 번 호출해도 안전합니다.
+
+### Upstash QStash로 설정할 때
+QStash는 기본이 POST라서 `/api/tick`이 POST도 받도록 해 두었습니다. 방식을 바꿀 필요가 없습니다.
+- **Destination**: `https://<서버 주소>/api/tick`
+- **Headers**
+  - `Upstash-Cron` = `*/10 * * * *`
+  - `Upstash-Forward-Authorization` = `Bearer <CRON_SECRET 값>` (콘솔에서는 `Upstash-Forward`와 `Authorization`을 두 칸에 나눠 넣습니다)
+- `Content-Type` 헤더와 Body는 필요 없습니다.
 
 ## 상시 실행 서버 (Railway)
 
