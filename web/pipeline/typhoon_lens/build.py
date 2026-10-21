@@ -131,7 +131,7 @@ def main():
     run = (
         dt.datetime.strptime(args.run, "%Y%m%d%H").replace(tzinfo=dt.UTC)
         if args.run
-        else source.latest_complete_run()
+        else source.latest_complete_run(args.step)
     )
     if args.latest:
         print(f"{run:%Y%m%d%H}")
