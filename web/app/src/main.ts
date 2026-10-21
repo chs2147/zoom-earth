@@ -2,11 +2,12 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
-import { baseStyle, OVERLAYS, PLACES } from "./basemap";
+import { baseStyle, configureOverlays, OVERLAYS, PLACES } from "./basemap";
 import {
   loadIndex,
   loadLatestRun,
   loadOfficial,
+  loadOverlays,
   type LayerInfo,
   type OfficialStorm,
   type Run,
@@ -151,6 +152,7 @@ async function start(): Promise<void> {
   const hash = readHash();
   const style = baseStyle();
   const officialData = loadOfficial();
+  const overlayData = loadOverlays();
   let run: Run;
   let models: string[];
   try {
@@ -637,8 +639,9 @@ async function start(): Promise<void> {
           field.id,
         );
       } catch (error) {
-        toast(`${overlay.title}을(를) 불러오지 못했습니다`);
+        toast(`${overlay.title}: ${(error as Error).message}`);
         console.warn(error);
+        renderMenus();
         return;
       }
     }
@@ -664,10 +667,10 @@ async function start(): Promise<void> {
     try {
       map.addSource(id, { type: "raster", tileSize: 256, ...(await overlay.tiles()) });
       map.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": overlay.opacity } }, "coast");
-    } catch {
+    } catch (error) {
       state.fires = false;
       renderMenus();
-      toast("산불 지도를 불러오지 못했습니다");
+      toast(`${overlay.title}: ${(error as Error).message}`);
     }
   }
 
@@ -919,6 +922,7 @@ async function start(): Promise<void> {
   }
   map.on("moveend", scheduleHash);
 
+  configureOverlays(await overlayData);
   if (state.base !== "forecast") await setBase(state.base);
   field.setLayer(currentLayer());
   renderMenus();

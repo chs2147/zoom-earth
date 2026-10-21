@@ -94,6 +94,12 @@ jobs:
         continue-on-error: true
         run: python -m typhoon_lens.official ../app/public/data
 
+      # Probe NASA GIBS for a satellite and date that return imagery; the
+      # log lists every candidate tried.
+      - name: Choose observation overlays
+        continue-on-error: true
+        run: python -m typhoon_lens.overlays ../app/public/data
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
