@@ -13,7 +13,9 @@ import {
   knots,
   matchOfficial,
   officialFeatures,
+  officialPositionAt,
   officialTitle,
+  officialType,
   positionAt,
   trackFeatures,
 } from "./storms";
@@ -214,34 +216,54 @@ async function start(): Promise<void> {
   });
   const OFFICIAL_LAYERS = ["official-cone", "official-wind", "official-history", "official-forecast", "official-points"];
 
-  const officialMarkers: maplibregl.Marker[] = [];
+  // Static labels for each forecast point.
+  const forecastLabels: maplibregl.Marker[] = [];
   for (const storm of official) {
-    const cat = categoryKt(storm.position.wind_kt ?? 0);
-    const element = document.createElement("button");
-    element.className = "official-marker";
-    element.style.setProperty("--storm-color", cat.color);
-    const wind = storm.position.wind_kt != null ? ` · ${storm.position.wind_kt} kt` : "";
-    element.innerHTML = `<span class="storm-icon" aria-hidden="true"></span><span class="official-label">${officialTitle(storm)}${wind}</span>`;
-    element.setAttribute("aria-label", `${storm.agency} ${officialTitle(storm)}${wind}`);
-    element.addEventListener("click", () => showOfficial(storm));
-    // Label above the icon so it does not collide with the model marker's label.
-    officialMarkers.push(
-      new maplibregl.Marker({ element, anchor: "bottom", offset: [0, 11] })
-        .setLngLat([storm.position.lon, storm.position.lat])
-        .addTo(map),
-    );
     for (const point of storm.forecast.slice(1)) {
       const label = document.createElement("div");
       label.className = "forecast-time";
       label.textContent = shortTime.format(Date.parse(point.time));
-      officialMarkers.push(new maplibregl.Marker({ element: label, anchor: "left", offset: [8, 0] }).setLngLat([point.lon, point.lat]).addTo(map));
+      forecastLabels.push(new maplibregl.Marker({ element: label, anchor: "left", offset: [8, 0] }).setLngLat([point.lon, point.lat]).addTo(map));
+    }
+  }
+
+  // One marker per official storm, moved along its track with the timeline.
+  const officialMarkers = new Map<string, maplibregl.Marker>();
+  for (const storm of official) {
+    const element = document.createElement("button");
+    element.className = "official-marker";
+    element.addEventListener("click", () => showOfficial(storm));
+    // Label above the icon so it does not collide with the model marker's label.
+    officialMarkers.set(
+      storm.id,
+      new maplibregl.Marker({ element, anchor: "bottom", offset: [0, 11] })
+        .setLngLat([storm.position.lon, storm.position.lat])
+        .addTo(map),
+    );
+  }
+
+  function updateOfficialMarkers(): void {
+    for (const storm of official) {
+      const marker = officialMarkers.get(storm.id)!;
+      const element = marker.getElement();
+      const position = state.official ? officialPositionAt(storm, state.time) : null;
+      element.hidden = position === null;
+      if (!position) continue;
+      marker.setLngLat([position.lon, position.lat]);
+      element.style.setProperty("--storm-color", categoryKt(position.wind_kt ?? 0).color);
+      const wind = position.wind_kt != null ? ` · ${position.wind_kt} kt` : "";
+      const tense = position.forecast ? " (예보)" : "";
+      const title = officialTitle(storm, officialType(storm, position.wind_kt));
+      element.innerHTML = `<span class="storm-icon" aria-hidden="true"></span><span class="official-label">${title}${wind}${tense}</span>`;
+      element.setAttribute("aria-label", `${storm.agency} ${title}${wind}${tense}`);
     }
   }
 
   function setOfficialVisible(visible: boolean): void {
     state.official = visible;
     for (const id of OFFICIAL_LAYERS) map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
-    officialMarkers.forEach((marker) => (marker.getElement().hidden = !visible));
+    forecastLabels.forEach((marker) => (marker.getElement().hidden = !visible));
+    updateOfficialMarkers();
   }
 
   function showOfficial(storm: OfficialStorm): void {
@@ -506,6 +528,7 @@ async function start(): Promise<void> {
     $("#lead").textContent = `${relative} · 예보 +${lead}h`;
     updateField();
     updateStormMarkers();
+    updateOfficialMarkers();
   }
 
   slider.addEventListener("input", () => {

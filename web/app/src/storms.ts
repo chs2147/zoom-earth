@@ -174,6 +174,65 @@ export function matchOfficial(track: Track, storms: OfficialStorm[]): OfficialSt
   return best?.[1];
 }
 
-export function officialTitle(storm: OfficialStorm): string {
-  return storm.name ? `${storm.type} ${storm.name} (${storm.number})` : `${storm.number} ${storm.type}`;
+// Basin term for a mature cyclone, from the JTWC/NHC file name (wp2926...).
+function matureTerm(storm: OfficialStorm): [string, string | null] {
+  const basin = storm.id.replace(/^(jtwc|nhc)-/, "").slice(0, 2);
+  if (basin === "wp") return ["태풍", "슈퍼태풍"];
+  if (basin === "ep" || basin === "cp" || basin === "al") return ["허리케인", null];
+  return ["사이클론", null];
+}
+
+// Class for a wind speed, so forecast positions show the forecast class
+// rather than the class at issue time.
+export function officialType(storm: OfficialStorm, windKt: number | null): string {
+  if (storm.kind === "alert" || windKt == null) return storm.type;
+  const [mature, superTerm] = matureTerm(storm);
+  if (superTerm && windKt >= 130) return superTerm;
+  if (windKt >= 64) return mature;
+  if (windKt >= 34) return "열대폭풍";
+  return "열대저압부";
+}
+
+export function officialTitle(storm: OfficialStorm, type = storm.type): string {
+  return storm.name ? `${type} ${storm.name} (${storm.number})` : `${storm.number} ${type}`;
+}
+
+// A formation alert has no forecast; keep its last fix on the map this long.
+const ALERT_HOLD_MS = 12 * 3600 * 1000;
+
+export interface OfficialPosition {
+  lat: number;
+  lon: number;
+  wind_kt: number | null;
+  forecast: boolean;
+}
+
+// Official position at a time: past track up to the warning, then the
+// forecast track. Outside the covered period there is no position.
+export function officialPositionAt(storm: OfficialStorm, time: number): OfficialPosition | null {
+  const issued = Date.parse(storm.issued);
+  const points = [
+    ...storm.history.filter((p) => storm.forecast.length === 0 || Date.parse(p.time) < issued),
+    ...storm.forecast,
+  ].map((p) => ({ ...p, t: Date.parse(p.time) }));
+  if (points.length === 0) return null;
+  const lons = unwrapped(points);
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (time < first.t) return null;
+  if (time >= last.t) {
+    const hold = storm.forecast.length === 0 ? ALERT_HOLD_MS : 0;
+    if (time > last.t + hold) return null;
+    return { lat: last.lat, lon: lons[lons.length - 1], wind_kt: last.wind_kt, forecast: last.t > issued };
+  }
+  const i = points.findIndex((p) => p.t > time);
+  const [a, b] = [points[i - 1], points[i]];
+  const f = (time - a.t) / (b.t - a.t);
+  const wind = a.wind_kt != null && b.wind_kt != null ? Math.round(a.wind_kt + (b.wind_kt - a.wind_kt) * f) : a.wind_kt;
+  return {
+    lat: a.lat + (b.lat - a.lat) * f,
+    lon: lons[i - 1] + (lons[i] - lons[i - 1]) * f,
+    wind_kt: wind,
+    forecast: time > issued,
+  };
 }
