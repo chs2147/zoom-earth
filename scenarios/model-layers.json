@@ -1,0 +1,22 @@
+{
+  "browser": {
+    "mode": "connect",
+    "cdp_endpoint": "http://127.0.0.1:9222",
+    "target_id": "REPLACE_WITH_TARGET_ID"
+  },
+  "start_url": { "url": "https://zoom.earth/maps/wind-speed/#view=19.3,128,5z/model=gfs" },
+  "actions": [
+    { "step_id": "gfs-wind-settle", "action": "wait_for_timeout", "duration_ms": 15000 },
+    {
+      "step_id": "goto-icon-pressure",
+      "action": "goto",
+      "destination": { "url": "https://zoom.earth/maps/pressure/#view=19.3,128,5z/model=icon" },
+      "wait_until": "load"
+    },
+    { "step_id": "icon-settle", "action": "wait_for_timeout", "duration_ms": 15000 }
+  ],
+  "capture": {
+    "after_each_step": ["url", "screenshot"],
+    "events": ["network", "console", "page-errors"]
+  }
+}
