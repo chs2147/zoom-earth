@@ -37,9 +37,10 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 | 태풍 | JTWC·NHC 공식 예보 진로·강풍 반경·불확실성 범위, 모델 자동 추적 진로, 시각별 상세 표 |
 | 관측 | 위성(NASA GIBS VIIRS), 강수 레이더(RainViewer), 산불 열점 |
 | 사용성 | 타임라인 재생, 도시별 값·풍향, 바람 흐름 애니메이션, 공유 링크, 풍속 단위 설정, 모바일 화면 |
-| 자동 갱신 | GitHub Actions가 매시간 공식 경보를 갱신하고, 새 모델 실행이 나오면 예보 지도를 다시 만들어 GitHub Pages에 배포 |
+| 자동 갱신 | Vercel 운영 서버가 10분마다 모델별 새 실행을 확인해 배포를 시작하고, 1시간마다 공식 경보를 갱신. 변환·배포는 GitHub Actions → GitHub Pages |
+| 운영 관리 | 관리 화면에서 모델별 상태(배포된 실행·원본 최신 실행·다음 실행 예상), 최근 배포 작업, 지금 점검·재배포·재시도 |
 
-자세한 구조와 실행 방법은 [`web/README.md`](web/README.md)에 있습니다.
+자세한 구조와 실행 방법은 [`web/README.md`](web/README.md), 운영 서버는 [`web/control/README.md`](web/control/README.md)에 있습니다. 앞으로 할 일(한국 KIM·일본 GSM 모델 추가 등)은 [`ROADMAP.md`](ROADMAP.md)에 있습니다.
 
 ## 버전 정보
 
@@ -77,7 +78,8 @@ zoom-earth/
 ├── analysis/        # REA 분석 보고서와 그림
 ├── scenarios/       # REA 브라우저 캡처 시나리오
 ├── tools/           # 타일 디코더, 진로 추출·그림 스크립트
-├── web/             # Typhoon Lens (pipeline: Python, app: TypeScript)
+├── web/             # Typhoon Lens (pipeline: Python, app: TypeScript, control: Vercel 운영 서버)
+├── ROADMAP.md       # 앞으로 할 일
 ├── .claude/         # 클라우드 세션용 REA 설치 훅
 └── .github/workflows/typhoon-lens.yml   # 데이터 생성·배포
 ```

@@ -39,6 +39,7 @@ web/
 │       ├── official.py # JTWC·NHC 공식 경보 → official.json
 │       ├── overlays.py # 쓸 수 있는 GIBS 위성·산불 레이어와 날짜 확인 → overlays.json
 │       └── build.py   # 실행 진입점, manifest/index 작성
+├── control/           # 운영 서버(Vercel): 모델별 갱신 감지·배포 시작·관리 화면
 └── app/               # TypeScript + MapLibre GL 웹 앱
     └── src/
         ├── fieldLayer.ts  # WebGL2 커스텀 레이어(디코딩, 보간, 팔레트, 등압선)
@@ -90,16 +91,22 @@ GFS는 6시간마다(00/06/12/18Z) 새 실행이 나오고, 384시간까지 모�
 
 ## 배포 (GitHub Pages)
 
-`.github/workflows/typhoon-lens.yml`이 매시간(매시 17분) 다음을 실행합니다.
-1. 끝까지 공개된 최신 실행을 모델별로 찾습니다. GFS는 384시간, ICON은 00·12Z 180시간 기준입니다.
+배포 시점은 운영 서버([`control/`](control/README.md), Vercel)가 정합니다.
+- 서버는 10분마다 모델별 새 실행을 확인합니다.
+- 새 실행이 완성됐거나 1시간 동안 배포가 없었으면, 실행할 모델 실행 시각을 입력으로 `.github/workflows/typhoon-lens.yml`을 실행합니다.
+
+workflow는 다음을 실행합니다.
+1. 입력받은 모델 실행을 씁니다. 입력이 비어 있으면(수동 실행) 끝까지 공개된 최신 실행을 직접 찾습니다. GFS는 384시간, ICON은 00·12Z 180시간 기준입니다.
 2. 실행별 프레임이 Actions 캐시에 있으면 재사용하고, 없으면 새로 만듭니다. ICON 생성이 실패해도 GFS만으로 배포합니다.
 3. JTWC·NHC 공식 경보를 갱신합니다. 실패해도 배포는 계속됩니다.
 4. NASA GIBS에서 실제 영상이 나오는 위성 레이어와 날짜를 고릅니다. 시도한 후보와 결과가 Actions 로그에 남습니다.
 5. 웹 앱을 빌드하고 GitHub Pages에 배포합니다.
 
+`main`의 `web/app`, `web/pipeline`, workflow가 바뀌어도 배포됩니다.
+
 처음 한 번은 저장소 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 설정해야 합니다. 배포 주소는 `https://<사용자>.github.io/zoom-earth/`입니다.
 
-수동 실행: **Actions → Deploy Typhoon Lens → Run workflow**.
+수동 실행: **Actions → Deploy Typhoon Lens → Run workflow**. 운영 서버 관리 화면의 "지금 재배포" 버튼도 같은 일을 합니다.
 
 ## ICON 처리 방식
 
