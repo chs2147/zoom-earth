@@ -101,7 +101,23 @@ function renderRuns(status) {
   );
 }
 
+// Only the always-on server (server.js) has an in-process scheduler.
+async function loadScheduler() {
+  try {
+    const response = await fetch("/api/scheduler");
+    if (!response.ok) return;
+    const s = await response.json();
+    const last = s.finishedAt ? `${ago(s.finishedAt)} · ${s.outcome}` : "아직 실행 전";
+    const next = s.nextAt ? ` · 다음 ${timeFormat.format(new Date(s.nextAt))}` : "";
+    $("scheduler").textContent = `자동 점검(${s.intervalMinutes}분마다): ${s.running ? "점검 중" : last}${next}${s.error ? ` · 오류: ${s.error}` : ""}`;
+    $("scheduler").hidden = false;
+  } catch {
+    // Vercel deployment: no scheduler endpoint.
+  }
+}
+
 async function load() {
+  loadScheduler();
   try {
     const response = await fetch("/api/status");
     const status = await response.json();

@@ -81,6 +81,25 @@
 
 같은 실행은 서버가 중복으로 시작하지 않으므로, 스케줄러가 여러 번 호출해도 안전합니다.
 
+## 상시 실행 서버 (Railway)
+
+`server.js`는 Vercel 기능 없이 Node.js 프로세스 하나로 동작합니다.
+- 시작할 때와 그 뒤 `TICK_MINUTES`(기본 10분)마다 점검을 직접 실행합니다.
+- 관리 화면과 API도 함께 제공합니다. 경로는 Vercel 배포와 같습니다.
+- `/api/scheduler`: 마지막 자동 점검 시각·결과·오류. 관리 화면에도 표시됩니다.
+- `/healthz`: Railway 상태 확인용
+
+Railway 설정:
+1. **New Project → Deploy from GitHub repo → `chs2147/zoom-earth`**
+2. 서비스 **Settings → Source → Root Directory**를 `/web/control`로 바꿉니다. 시작 명령, 상태 확인, 재시작 정책은 `railway.json`에 있습니다.
+3. **Variables**에 `GITHUB_TOKEN`, `ADMIN_TOKEN`을 넣습니다. 외부에서 `/api/tick`을 부를 일이 있으면 `CRON_SECRET`도 넣습니다.
+4. **Settings → Networking → Generate Domain**으로 관리 화면 주소를 만듭니다.
+5. **Deployments → View logs**에 `[tick] … waiting: …` 또는 `started: …`가 10분마다 찍히면 정상입니다.
+
+같은 실행은 서버가 중복으로 시작하지 않습니다. 그래서 Vercel 배포를 함께 켜 둬도 안전합니다.
+
+로컬 실행: `GITHUB_TOKEN=… ADMIN_TOKEN=… npm start` (http://localhost:3000)
+
 ## 개발
 
 ```bash

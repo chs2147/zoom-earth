@@ -92,7 +92,7 @@ GFS는 6시간마다(00/06/12/18Z) 새 실행이 나오고, 384시간까지 모�
 ## 배포 (GitHub Pages)
 
 배포 시점은 운영 서버([`control/`](control/README.md), Vercel)가 정합니다.
-- 서버는 10분마다(외부 스케줄러 cron-job.org가 호출) 모델별 새 실행을 확인합니다.
+- 서버는 Railway에서 상시 실행되며 10분마다 모델별 새 실행을 확인합니다. Vercel 배포는 관리 화면·수동 실행용으로 함께 쓸 수 있습니다.
 - 새 실행이 완성됐거나 1시간 동안 배포가 없었으면, 실행할 모델 실행 시각을 입력으로 `.github/workflows/typhoon-lens.yml`을 실행합니다.
 
 workflow는 다음을 실행합니다.
