@@ -6,6 +6,7 @@ requests located through each file's .idx inventory.
 
 import datetime as dt
 import re
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -49,14 +50,32 @@ def forecast_hours(run, step_hours=3):
     return list(range(0, FINAL_HOUR + 1, step_hours))
 
 
-def latest_complete_run(now=None, lookback_runs=8):
-    """Most recent run whose final forecast hour is published."""
+def _published_hours(run):
+    """Forecast hours whose .idx inventory is published for a run."""
+    prefix = f"gfs.{run:%Y%m%d}/{run:%H}/atmos/gfs.t{run:%H}z.pgrb2.0p50.f"
+    hours, token = set(), None
+    while True:
+        url = f"{BUCKET}/?list-type=2&prefix={prefix}&max-keys=1000"
+        if token:
+            url += "&continuation-token=" + urllib.parse.quote(token)
+        listing = _get(url).decode()
+        hours |= {int(h) for h in re.findall(r"\.f(\d{3})\.idx</Key>", listing)}
+        token = re.search(r"<NextContinuationToken>([^<]+)</NextContinuationToken>", listing)
+        if not token:
+            return hours
+        token = token[1]
+
+
+def latest_complete_run(step_hours=3, now=None, lookback_runs=8):
+    """Most recent run with every needed forecast hour published.
+
+    NOAA uploads forecast hours out of order, so the final hour alone does
+    not show that a run is complete.
+    """
     now = now or dt.datetime.now(dt.UTC)
     run = now.replace(minute=0, second=0, microsecond=0, hour=now.hour - now.hour % 6)
     for _ in range(lookback_runs):
-        prefix = f"gfs.{run:%Y%m%d}/{run:%H}/atmos/gfs.t{run:%H}z.pgrb2.0p50.f{FINAL_HOUR:03d}.idx"
-        listing = _get(f"{BUCKET}/?list-type=2&prefix={prefix}&max-keys=1").decode()
-        if "<Key>" in listing:
+        if set(forecast_hours(run, step_hours)) <= _published_hours(run):
             return run
         run -= dt.timedelta(hours=6)
     raise RuntimeError("no complete GFS run found in the lookback window")

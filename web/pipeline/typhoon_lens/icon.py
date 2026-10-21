@@ -13,6 +13,7 @@ Only the 00Z and 12Z runs reach 180 hours; 06Z and 18Z stop at 120.
 import bz2
 import datetime as dt
 import re
+import sys
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -59,21 +60,38 @@ def forecast_hours(run, step_hours=3):
     return [h for h in range(0, FINAL_HOUR + 1, step_hours) if h in available]
 
 
-def latest_complete_run():
-    """Most recent 00Z or 12Z run whose final hour is published.
+# Variables read per step, and the time-invariant cell coordinates.
+VARIABLES = ("u_10m", "v_10m", "vmax_10m", "pmsl", "t_2m", "relhum_2m", "clct", "tot_prec", "snow_gsp", "snow_con")
 
-    DWD keeps only the latest run of each cycle hour in its directory.
+
+def _published(run, variable):
+    """Output hours of `run` present in a variable's DWD directory."""
+    listing = _get(f"{BASE}/{run:%H}/{variable}/").decode()
+    return {int(h) for h in re.findall(rf"single-level_{run:%Y%m%d%H}_(\d{{3}})_", listing)}
+
+
+def latest_complete_run(step_hours=3):
+    """Most recent 00Z or 12Z run with every needed file published.
+
+    DWD keeps only the latest run of each cycle hour and uploads variables
+    independently, so each variable's directory is checked.
     """
-    best = None
+    candidates = set()
     for cycle in ("00", "12"):
         listing = _get(f"{BASE}/{cycle}/pmsl/").decode()
-        runs = set(re.findall(rf"single-level_(\d{{10}})_{FINAL_HOUR:03d}_PMSL", listing))
-        for run in runs:
-            moment = dt.datetime.strptime(run, "%Y%m%d%H").replace(tzinfo=dt.UTC)
-            best = max(best, moment) if best else moment
-    if best is None:
-        raise RuntimeError("no complete ICON 00Z/12Z run found")
-    return best
+        candidates |= set(re.findall(rf"single-level_(\d{{10}})_{FINAL_HOUR:03d}_PMSL", listing))
+    for run_text in sorted(candidates, reverse=True):
+        run = dt.datetime.strptime(run_text, "%Y%m%d%H").replace(tzinfo=dt.UTC)
+        hours = set(forecast_hours(run, step_hours))
+        # Accumulations also need the preceding output hour.
+        needed = hours | {p for p in (_previous_output(h) for h in hours) if p is not None} | {1}
+        complete = all(
+            (needed - {0} if variable == "vmax_10m" else needed) <= _published(run, variable) for variable in VARIABLES
+        )
+        if complete:
+            return run
+        print(f"ICON {run:%Y-%m-%d %HZ} is not fully published yet", file=sys.stderr)
+    raise RuntimeError("no complete ICON 00Z/12Z run found")
 
 
 def _mapping(run):
