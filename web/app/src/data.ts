@@ -61,6 +61,7 @@ export interface OfficialPoint {
   lat: number;
   lon: number;
   wind_kt: number | null;
+  pressure_hpa?: number | null;
 }
 
 export interface OfficialForecastPoint extends OfficialPoint {
@@ -84,6 +85,7 @@ export interface OfficialStorm {
   remarks: string[];
   cone: [number, number][] | null;
   wind_field: Record<string, [number, number][]> | null;
+  links?: { warning: string; graphic: string };
 }
 
 export interface Official {

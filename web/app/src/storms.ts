@@ -7,19 +7,20 @@ import type { OfficialStorm, Track } from "./data";
 const MS_TO_KT = 1.943844;
 
 export interface Category {
+  code: string;
   label: string;
   color: string;
 }
 
-// Saffir-Simpson classes on the model's 10 m maximum wind.
+// Saffir-Simpson classes on the 1-minute (JTWC/NHC) or model maximum wind.
 const CATEGORIES: [number, Category][] = [
-  [137, { label: "5등급", color: "#d64fa0" }],
-  [113, { label: "4등급", color: "#e04a4a" }],
-  [96, { label: "3등급", color: "#ef7d3c" }],
-  [83, { label: "2등급", color: "#f2b13f" }],
-  [64, { label: "1등급", color: "#f0d26b" }],
-  [34, { label: "열대폭풍", color: "#5cc28a" }],
-  [0, { label: "열대저압부", color: "#7fb3d5" }],
+  [137, { code: "5", label: "5등급", color: "#d64fa0" }],
+  [113, { code: "4", label: "4등급", color: "#e04a4a" }],
+  [96, { code: "3", label: "3등급", color: "#ef7d3c" }],
+  [83, { code: "2", label: "2등급", color: "#f2b13f" }],
+  [64, { code: "1", label: "1등급", color: "#f0d26b" }],
+  [34, { code: "TS", label: "열대폭풍", color: "#5cc28a" }],
+  [0, { code: "TD", label: "열대저압부", color: "#7fb3d5" }],
 ];
 
 export function category(windMs: number): Category {
@@ -127,31 +128,32 @@ export function officialFeatures(storms: OfficialStorm[]): FeatureCollection {
         geometry: { type: "Polygon", coordinates: [ring] },
       });
     }
-    const history = storm.history;
-    if (history.length > 1) {
-      const lons = unwrapped(history);
-      features.push({
-        type: "Feature",
-        properties: { kind: "history", storm: storm.id },
-        geometry: { type: "LineString", coordinates: history.map((p, i) => [lons[i], p.lat]) },
-      });
-    }
-    const forecast = storm.forecast;
-    if (forecast.length > 1) {
-      const lons = unwrapped(forecast);
-      features.push({
-        type: "Feature",
-        properties: { kind: "forecast", storm: storm.id },
-        geometry: { type: "LineString", coordinates: forecast.map((p, i) => [lons[i], p.lat]) },
-      });
-      forecast.forEach((p, i) =>
+    // Past and forecast track, each segment coloured by the class at its start.
+    const track = trackPoints(storm);
+    const lons = unwrapped(track);
+    track.forEach((p, i) => {
+      if (i > 0) {
+        const previous = track[i - 1];
         features.push({
           type: "Feature",
-          properties: { kind: "forecast-point", color: categoryKt(p.wind_kt ?? 0).color, storm: storm.id },
-          geometry: { type: "Point", coordinates: [lons[i], p.lat] },
-        }),
-      );
-    }
+          properties: {
+            kind: p.forecast ? "forecast-segment" : "history-segment",
+            color: categoryKt(previous.wind_kt ?? 0).color,
+            storm: storm.id,
+          },
+          geometry: { type: "LineString", coordinates: [[lons[i - 1], previous.lat], [lons[i], p.lat]] },
+        });
+      }
+      features.push({
+        type: "Feature",
+        properties: {
+          kind: p.forecast ? "forecast-point" : "history-point",
+          color: categoryKt(p.wind_kt ?? 0).color,
+          storm: storm.id,
+        },
+        geometry: { type: "Point", coordinates: [lons[i], p.lat] },
+      });
+    });
   }
   return { type: "FeatureCollection", features };
 }
@@ -211,10 +213,7 @@ export interface OfficialPosition {
 // forecast track. Outside the covered period there is no position.
 export function officialPositionAt(storm: OfficialStorm, time: number): OfficialPosition | null {
   const issued = Date.parse(storm.issued);
-  const points = [
-    ...storm.history.filter((p) => storm.forecast.length === 0 || Date.parse(p.time) < issued),
-    ...storm.forecast,
-  ].map((p) => ({ ...p, t: Date.parse(p.time) }));
+  const points = trackPoints(storm);
   if (points.length === 0) return null;
   const lons = unwrapped(points);
   const first = points[0];
@@ -235,4 +234,50 @@ export function officialPositionAt(storm: OfficialStorm, time: number): Official
     wind_kt: wind,
     forecast: time > issued,
   };
+}
+
+interface TrackPointKt {
+  time: string;
+  t: number;
+  lat: number;
+  lon: number;
+  wind_kt: number | null;
+  pressure_hpa: number | null;
+  forecast: boolean;
+}
+
+// Past fixes before the warning, then the forecast from the warning time.
+export function trackPoints(storm: OfficialStorm): TrackPointKt[] {
+  const issued = Date.parse(storm.issued);
+  const past = storm.history.filter((p) => storm.forecast.length === 0 || Date.parse(p.time) < issued);
+  return [
+    ...past.map((p) => ({ ...p, t: Date.parse(p.time), pressure_hpa: p.pressure_hpa ?? null, forecast: false })),
+    ...storm.forecast.map((p) => ({
+      ...p,
+      t: Date.parse(p.time),
+      pressure_hpa: p.pressure_hpa ?? null,
+      forecast: Date.parse(p.time) > issued,
+    })),
+  ];
+}
+
+export interface StormRow {
+  time: number;
+  windKt: number | null;
+  pressure: number | null;
+  forecast: boolean;
+}
+
+// Table rows for the detail panel, newest first.
+export function officialRows(storm: OfficialStorm): StormRow[] {
+  return trackPoints(storm)
+    .map((p) => ({ time: p.t, windKt: p.wind_kt, pressure: p.pressure_hpa, forecast: p.forecast }))
+    .reverse();
+}
+
+export function modelRows(track: Track, runTime: number): StormRow[] {
+  return track.points
+    .filter((p) => p.hour % 6 === 0)
+    .map((p) => ({ time: Date.parse(p.valid), windKt: p.wind * MS_TO_KT, pressure: p.mslp, forecast: Date.parse(p.valid) > runTime }))
+    .reverse();
 }
