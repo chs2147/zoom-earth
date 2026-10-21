@@ -20,6 +20,7 @@ import urllib.error
 import urllib.request
 
 GIBS = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best"
+GIBS_WMS = "https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi"
 RAINVIEWER = "https://api.rainviewer.com/public/weather-maps.json"
 USER_AGENT = "TyphoonLens/0.1 (personal, non-commercial)"
 
@@ -57,7 +58,8 @@ def _get(url):
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.status, response.headers.get("Content-Type", ""), response.read()
     except urllib.error.HTTPError as error:
-        return error.code, error.headers.get("Content-Type", ""), b""
+        # Keep the start of the error body (an OWS exception) for the log.
+        return error.code, error.headers.get("Content-Type", ""), error.read()[:300]
     except (urllib.error.URLError, TimeoutError) as error:
         print(f"  {url}: {error}", file=sys.stderr)
         return 0, "", b""
@@ -71,6 +73,37 @@ def _probe_url(template):
     return template.replace("{z}", str(PROBE["z"])).replace("{y}", str(PROBE["y"])).replace("{x}", str(PROBE["x"]))
 
 
+def _wms_template(layer, day):
+    # MapLibre fills {bbox-epsg-3857} per 256 px tile.
+    return (
+        f"{GIBS_WMS}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS={layer}&STYLES=&CRS=EPSG:3857"
+        f"&BBOX={{bbox-epsg-3857}}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE&TIME={day}"
+    )
+
+
+def _probe_bbox():
+    """EPSG:3857 bounds of the probe tile, as MapLibre writes {bbox-epsg-3857}."""
+    extent = 20037508.342789244
+    size = 2 * extent / 2 ** PROBE["z"]
+    west = -extent + PROBE["x"] * size
+    north = extent - PROBE["y"] * size
+    return f"{west},{north - size},{west + size},{north}"
+
+
+def choose_wms(candidates, accept, days, get=_get):
+    """First (layer, label, day, template) whose WMS GetMap is accepted."""
+    for day in days:
+        for layer, label in candidates:
+            template = _wms_template(layer, day)
+            status, content_type, body = get(template.replace("{bbox-epsg-3857}", _probe_bbox()))
+            ok = accept(status, content_type, body)
+            detail = "" if ok or content_type.startswith("image/") else f" {body[:160]!r}"
+            print(f"  WMS {layer} {day}: HTTP {status} {content_type} {len(body)} B -> {'ok' if ok else 'no'}{detail}", file=sys.stderr)
+            if ok:
+                return layer, label, day, template
+    return None
+
+
 def choose(candidates, matrices, extension, accept, days, get=_get):
     """First (layer, label, day, template, maxzoom) whose probe tile is accepted."""
     for day in days:
@@ -79,7 +112,8 @@ def choose(candidates, matrices, extension, accept, days, get=_get):
                 template = _template(layer, day, matrix, extension)
                 status, content_type, body = get(_probe_url(template))
                 ok = accept(status, content_type, body)
-                print(f"  {layer} {matrix} {day}: HTTP {status} {content_type} {len(body)} B -> {'ok' if ok else 'no'}", file=sys.stderr)
+                detail = "" if ok or content_type.startswith("image/") else f" {body[:160]!r}"
+                print(f"  {layer} {matrix} {day}: HTTP {status} {content_type} {len(body)} B -> {'ok' if ok else 'no'}{detail}", file=sys.stderr)
                 if ok:
                     return layer, label, day, template, int(matrix.rsplit("Level", 1)[1])
     return None
@@ -114,7 +148,12 @@ def build(now=None, get=_get):
     )
 
     print("fires:", file=sys.stderr)
+    # GIBS serves fire detections as vector data, so pre-rendered WMTS tiles
+    # may not exist; WMS renders them to PNG for any tile's bounding box.
     chosen = choose(FIRES, FIRES_MATRICES, "png", _fires, days, get)
+    if chosen is None:
+        wms = choose_wms(FIRES, _fires, days, get)
+        chosen = (*wms, 9) if wms else None
     result["fires"] = (
         {
             "tiles": [chosen[3]],
