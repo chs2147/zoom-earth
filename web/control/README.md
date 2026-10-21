@@ -3,7 +3,7 @@
 모델별 예보 갱신을 관리하는 서버입니다. 무거운 변환은 GitHub Actions가 하고, 이 서버는 **언제 무엇을 배포할지** 정합니다.
 
 ```
- Vercel Cron (10분마다)
+ 외부 스케줄러 cron-job.org (10분마다) + Vercel Cron (하루 1번, 예비)
         │
         ▼
  /api/tick ──► 모델 원본 확인 (NOAA S3 · DWD)      최신 완성 실행
@@ -47,7 +47,7 @@
 | 경로 | 인증 | 내용 |
 |---|---|---|
 | `GET /api/status` | 없음 | 모델·사이트·배포 상태(JSON). CDN에 60초 캐시 |
-| `GET /api/tick` | `Authorization: Bearer $CRON_SECRET` | 점검 후 필요하면 배포 시작. Vercel Cron이 호출. `?dry=1`은 점검만 |
+| `GET /api/tick` | `Authorization: Bearer $CRON_SECRET` | 점검 후 필요하면 배포 시작. 외부 스케줄러와 Vercel Cron이 호출. `?dry=1`은 점검만 |
 | `POST /api/dispatch` | `Authorization: Bearer $ADMIN_TOKEN` | `{"action":"check"}` 지금 점검, `{"action":"refresh"}` 지금 재배포, `{"action":"retry","model":"icon"}` 실패한 모델 다시 시도 |
 
 `/`는 관리 화면입니다. 상태를 1분마다 새로 고치고, 관리 토큰을 넣으면 위 동작을 버튼으로 실행합니다.
@@ -57,7 +57,7 @@
 | 이름 | 필수 | 내용 |
 |---|---|---|
 | `GITHUB_TOKEN` | ✅ | Fine-grained personal access token. 저장소 `chs2147/zoom-earth`만, 권한 **Actions: Read and write** |
-| `CRON_SECRET` | ✅ | Vercel Cron 인증용 임의 문자열. Vercel이 Cron 호출에 자동으로 붙입니다 |
+| `CRON_SECRET` | ✅ | `/api/tick` 인증용 임의 문자열. Vercel Cron은 자동으로 붙이고, 외부 스케줄러에는 같은 값을 헤더로 넣습니다 |
 | `ADMIN_TOKEN` | 관리 화면 버튼을 쓸 때 | 관리 동작 인증용 임의 문자열 |
 | `SITE_URL` | | 기본값 `https://chs2147.github.io/zoom-earth/` |
 | `GITHUB_OWNER`, `GITHUB_REPO`, `GITHUB_WORKFLOW`, `GITHUB_REF_NAME` | | 기본값 `chs2147`, `zoom-earth`, `typhoon-lens.yml`, `main` |
@@ -66,7 +66,20 @@
 
 - Root Directory: `web/control`
 - Framework Preset: Other (빌드 없음). `public/`이 정적 파일, `api/`가 함수입니다.
-- Cron은 `vercel.json`에 있습니다(10분마다). Vercel Hobby 요금제는 Cron을 하루 1번만 허용하므로, 10분 간격은 Pro 요금제에서만 됩니다. Hobby라면 외부 스케줄러가 같은 헤더로 `/api/tick`을 호출하면 됩니다.
+- Vercel Hobby(무료) 요금제는 Cron을 하루 1번만 허용합니다. 10분 간격으로 설정하면 배포가 거절됩니다.
+  - `vercel.json`의 Cron은 하루 1번(03:17 UTC 전후)만 도는 예비용입니다.
+  - 10분 간격 점검은 외부 스케줄러가 맡습니다.
+- Pro 요금제로 바꾸면 `vercel.json`의 schedule을 `*/10 * * * *`로 바꾸고 외부 스케줄러를 끄면 됩니다.
+
+## 외부 스케줄러 설정 (cron-job.org, 무료)
+
+1. https://cron-job.org 에 가입하고 **Create cronjob**을 누릅니다.
+2. **URL**: `https://<Vercel 프로젝트 주소>/api/tick`
+3. **Execution schedule**: Every 10 minutes
+4. **Advanced → Headers**: `Authorization` = `Bearer <CRON_SECRET 값>`
+5. 저장 후 **Test run**을 누릅니다. 응답이 200이고 JSON에 `models`가 있으면 정상입니다. 401이면 헤더 값이 `CRON_SECRET`과 다른 것입니다.
+
+같은 실행은 서버가 중복으로 시작하지 않으므로, 스케줄러가 여러 번 호출해도 안전합니다.
 
 ## 개발
 
