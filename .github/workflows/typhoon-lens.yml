@@ -1,8 +1,8 @@
 name: Deploy Typhoon Lens
 
 # Hourly: refresh official cyclone warnings and redeploy. When a new GFS run
-# is complete (every 6 hours), rebuild its forecast frames first; otherwise
-# reuse the frames cached for that run.
+# (every 6 hours) or ICON 00Z/12Z run is complete, build its forecast frames
+# first; otherwise reuse the frames cached for that run.
 on:
   schedule:
     - cron: "17 * * * *"
@@ -40,27 +40,54 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Find latest complete GFS run
-        id: gfs
-        run: python -c "from typhoon_lens import gfs; print(f'run={gfs.latest_complete_run():%Y%m%d%H}')" >> "$GITHUB_OUTPUT"
+      - name: Find latest complete model runs
+        id: runs
+        run: |
+          echo "gfs=$(python -m typhoon_lens.build ../app/public/data --model gfs --latest)" >> "$GITHUB_OUTPUT"
+          echo "icon=$(python -m typhoon_lens.build ../app/public/data --model icon --latest || true)" >> "$GITHUB_OUTPUT"
 
-      - name: Restore forecast frames
-        id: frames
+      - name: Restore GFS frames
+        id: gfs
         uses: actions/cache/restore@v4
         with:
-          path: web/app/public/data
-          key: typhoon-lens-gfs-${{ steps.gfs.outputs.run }}
+          path: web/app/public/data/gfs
+          key: typhoon-lens-gfs-${{ steps.runs.outputs.gfs }}
 
-      - name: Build forecast frames
-        if: steps.frames.outputs.cache-hit != 'true'
-        run: python -m typhoon_lens.build ../app/public/data --run "${{ steps.gfs.outputs.run }}" --keep 1
+      - name: Build GFS frames
+        if: steps.gfs.outputs.cache-hit != 'true'
+        run: python -m typhoon_lens.build ../app/public/data --model gfs --run "${{ steps.runs.outputs.gfs }}" --keep 1
 
-      - name: Save forecast frames
-        if: steps.frames.outputs.cache-hit != 'true'
+      - name: Save GFS frames
+        if: steps.gfs.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: web/app/public/data
-          key: typhoon-lens-gfs-${{ steps.gfs.outputs.run }}
+          path: web/app/public/data/gfs
+          key: typhoon-lens-gfs-${{ steps.runs.outputs.gfs }}
+
+      - name: Restore ICON frames
+        id: icon
+        if: steps.runs.outputs.icon != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: web/app/public/data/icon
+          key: typhoon-lens-icon-${{ steps.runs.outputs.icon }}
+
+      # A DWD outage keeps the site up with GFS only.
+      - name: Build ICON frames
+        id: icon-build
+        if: steps.runs.outputs.icon != '' && steps.icon.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: python -m typhoon_lens.build ../app/public/data --model icon --run "${{ steps.runs.outputs.icon }}" --keep 1
+
+      - name: Save ICON frames
+        if: steps.icon-build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: web/app/public/data/icon
+          key: typhoon-lens-icon-${{ steps.runs.outputs.icon }}
+
+      - name: Write model index
+        run: python -m typhoon_lens.build ../app/public/data --index-only
 
       # A JTWC or NHC outage keeps the site up; the app then shows no warnings.
       - name: Refresh official warnings

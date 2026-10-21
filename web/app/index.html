@@ -28,6 +28,8 @@
 
     <section id="layers-panel" class="panel" hidden aria-label="레이어">
       <div class="panel-head"><h2>레이어</h2><button class="panel-close" aria-label="닫기">×</button></div>
+      <h3 class="model-heading">예보 모델</h3>
+      <div id="model-list" role="radiogroup"></div>
       <h3>예보 지도</h3>
       <div id="layer-list" role="radiogroup"></div>
       <h3>관측 · 오버레이</h3>
@@ -36,7 +38,7 @@
 
     <section id="storms-panel" class="panel" hidden aria-label="열대저기압">
       <div class="panel-head"><h2>열대저기압</h2><button class="panel-close" aria-label="닫기">×</button></div>
-      <p class="panel-note">공식 예보는 JTWC·NHC 경보이고, 흰 점선이 예보 진로, 흰 영역이 근사 불확실성 범위입니다. 모델 진로는 GFS에서 자동으로 찾은 것으로 공식 예보가 아닙니다.</p>
+      <p class="panel-note">공식 예보는 JTWC·NHC 경보이고, 흰 점선이 예보 진로, 흰 영역이 근사 불확실성 범위입니다. 모델 진로는 선택한 예보 모델(GFS·ICON)에서 자동으로 찾은 것으로 공식 예보가 아닙니다.</p>
       <ul id="storm-list"></ul>
     </section>
 

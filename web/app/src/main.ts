@@ -3,7 +3,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
 import { baseStyle, OVERLAYS, PLACES } from "./basemap";
-import { loadLatestRun, loadOfficial, type LayerInfo, type OfficialStorm, type Run, type Track } from "./data";
+import { loadIndex, loadLatestRun, loadOfficial, type LayerInfo, type OfficialStorm, type Run, type Track } from "./data";
 import { FieldLayer } from "./fieldLayer";
 import { FrameCache, sampleFrame, type Frame } from "./frames";
 import { cssGradient, SCALES, scaleCoordinate } from "./palettes";
@@ -21,11 +21,17 @@ import {
 } from "./storms";
 
 const HOUR = 3600 * 1000;
+
+const MODEL_NAMES: Record<string, string> = {
+  gfs: "GFS · 미국 NOAA",
+  icon: "ICON · 독일 DWD",
+};
 const PLAY_HOURS_PER_SECOND = 6;
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
 
 const state = {
+  model: "gfs",
   layer: "wind" as string | null,
   time: Date.now(),
   playing: false,
@@ -87,22 +93,41 @@ async function start(): Promise<void> {
   const style = baseStyle();
   const officialData = loadOfficial();
   let run: Run;
+  let models: string[];
   try {
-    run = await loadLatestRun();
+    const index = await loadIndex();
+    models = Object.keys(MODEL_NAMES).filter((name) => index.models[name]);
+    state.model = models.includes(state.model) ? state.model : models[0];
+    run = await loadLatestRun(state.model, index);
   } catch (error) {
     $("#status").textContent = `예보 데이터를 불러오지 못했습니다: ${(error as Error).message}`;
     return;
   }
-  const { manifest } = run;
-  const layers = new Map(manifest.layers.map((layer) => [layer.id, layer]));
-  const steps = manifest.steps.map((s) => ({ ...s, time: Date.parse(s.valid) }));
-  const first = steps[0].time;
-  const last = steps[steps.length - 1].time;
-  const runTime = Date.parse(manifest.run);
-  state.time = Math.min(last, Math.max(first, Math.round(Date.now() / HOUR) * HOUR));
+  // Everything that depends on the selected model's run.
+  function makeView(run: Run) {
+    const steps = run.manifest.steps.map((s) => ({ ...s, time: Date.parse(s.valid) }));
+    return {
+      run,
+      label: run.manifest.model.toUpperCase(),
+      layers: new Map(run.manifest.layers.map((layer) => [layer.id, layer])),
+      steps,
+      first: steps[0].time,
+      last: steps[steps.length - 1].time,
+      runTime: Date.parse(run.manifest.run),
+      frames: new FrameCache(run),
+      tracks: run.storms.tracks,
+      matched: new Map<string, string | undefined>(),
+    };
+  }
+  let view = makeView(run);
+  state.time = Math.min(view.last, Math.max(view.first, Math.round(Date.now() / HOUR) * HOUR));
 
-  const runDate = new Date(runTime);
-  $("#run").textContent = `${manifest.title} · ${runDate.getUTCDate()}일 ${String(runDate.getUTCHours()).padStart(2, "0")}Z 실행 · ${Math.round((last - runTime) / HOUR / 24)}일 예보`;
+  function renderRunInfo(): void {
+    const runDate = new Date(view.runTime);
+    const days = Math.round(((view.last - view.runTime) / HOUR / 24) * 10) / 10;
+    $("#run").textContent = `${view.run.manifest.title} · ${runDate.getUTCDate()}일 ${String(runDate.getUTCHours()).padStart(2, "0")}Z 실행 · ${days}일 예보`;
+  }
+  renderRunInfo();
   $("#status").textContent = "";
 
   const map = new maplibregl.Map({
@@ -121,13 +146,12 @@ async function start(): Promise<void> {
   map.addControl(
     new maplibregl.AttributionControl({
       compact: true,
-      customAttribution: `${manifest.attribution} · JTWC · NHC · Natural Earth`,
+      customAttribution: "NOAA GFS · DWD ICON · JTWC · NHC · Natural Earth",
     }),
     "bottom-right",
   );
 
   const field = new FieldLayer();
-  const frames = new FrameCache(run);
 
   await new Promise<void>((resolve) => map.once("load", () => resolve()));
   map.addLayer(field, "coast");
@@ -140,8 +164,7 @@ async function start(): Promise<void> {
   }
 
   // Storm tracks.
-  const tracks = run.storms.tracks;
-  map.addSource("tracks", { type: "geojson", data: trackFeatures(tracks) });
+  map.addSource("tracks", { type: "geojson", data: trackFeatures(view.tracks) });
   map.addLayer({
     id: "track-lines",
     type: "line",
@@ -282,7 +305,7 @@ async function start(): Promise<void> {
 
   const stormMarkers = new Map<string, maplibregl.Marker>();
   function updateStormMarkers(): void {
-    for (const track of tracks) {
+    for (const track of view.tracks) {
       const position = state.storms ? positionAt(track, state.time) : null;
       let marker = stormMarkers.get(track.id);
       if (!position) {
@@ -304,8 +327,8 @@ async function start(): Promise<void> {
       marker.setLngLat([position.lon, position.lat]);
       const element = marker.getElement();
       element.style.setProperty("--storm-color", cat.color);
-      const name = matched.get(track.id);
-      element.innerHTML = `<span class="storm-icon" aria-hidden="true"></span><span class="storm-label">GFS${name ? ` ${name}` : ""} · ${Math.round(position.mslp)} hPa</span>`;
+      const name = view.matched.get(track.id);
+      element.innerHTML = `<span class="storm-icon" aria-hidden="true"></span><span class="storm-label">${view.label}${name ? ` ${name}` : ""} · ${Math.round(position.mslp)} hPa</span>`;
       element.setAttribute("aria-label", `열대저기압 ${cat.label}, 중심기압 ${Math.round(position.mslp)} hPa`);
     }
   }
@@ -344,12 +367,12 @@ async function start(): Promise<void> {
       item.append(button);
       list.append(item);
     });
-    list.insertAdjacentHTML("beforeend", `<li class="section">모델 예상 진로 · GFS</li>`);
-    if (tracks.length === 0) {
+    list.insertAdjacentHTML("beforeend", `<li class="section">모델 예상 진로 · ${view.label}</li>`);
+    if (view.tracks.length === 0) {
       list.insertAdjacentHTML("beforeend", `<li class="empty">이번 실행에서 감지된 열대저기압이 없습니다.</li>`);
       return;
     }
-    tracks.forEach((track) => {
+    view.tracks.forEach((track) => {
       const firstPoint = track.points[0];
       const lastPoint = track.points[track.points.length - 1];
       const cat = category(track.max_wind);
@@ -357,7 +380,7 @@ async function start(): Promise<void> {
       const button = document.createElement("button");
       button.innerHTML = `
         <span class="swatch" style="background:${cat.color}"></span>
-        <span class="storm-title">${matched.get(track.id) ? `${matched.get(track.id)} · ` : ""}${cat.label} · 최저 ${Math.round(track.min_mslp)} hPa</span>
+        <span class="storm-title">${view.matched.get(track.id) ? `${view.matched.get(track.id)} · ` : ""}${cat.label} · 최저 ${Math.round(track.min_mslp)} hPa</span>
         <span class="storm-meta">최대 ${track.max_wind.toFixed(0)} m/s (${knots(track.max_wind)} kt) ·
         ${timeFormat.format(Date.parse(firstPoint.valid))} – ${timeFormat.format(Date.parse(lastPoint.valid))}</span>`;
       button.addEventListener("click", () => showStorm(track));
@@ -365,22 +388,24 @@ async function start(): Promise<void> {
       list.append(item);
     });
   }
-  const matched = new Map(
-    tracks.map((track) => {
+  function matchTracks(): void {
+    for (const track of view.tracks) {
       const storm = matchOfficial(track, official);
-      return [track.id, storm ? (storm.name ?? storm.number) : undefined] as const;
-    }),
-  );
+      view.matched.set(track.id, storm ? (storm.name ?? storm.number) : undefined);
+    }
+  }
+  matchTracks();
   renderStormList();
 
   // Forecast field rendering.
   let request = 0;
   async function updateField(): Promise<void> {
-    const layer = state.layer ? layers.get(state.layer) : undefined;
+    const layer = state.layer ? view.layers.get(state.layer) : undefined;
     if (!layer) {
       field.setLayer(undefined);
       return;
     }
+    const { steps, frames } = view;
     let index = steps.findIndex((s) => s.time >= state.time);
     if (index <= 0) index = 1;
     const [a, b] = [steps[index - 1], steps[index]];
@@ -397,7 +422,7 @@ async function start(): Promise<void> {
 
   function selectLayer(id: string | null): void {
     state.layer = id;
-    field.setLayer(id ? layers.get(id) : undefined);
+    field.setLayer(id ? view.layers.get(id) : undefined);
     document.querySelectorAll<HTMLInputElement>("input[name=layer]").forEach((input) => {
       input.checked = input.value === (id ?? "none");
     });
@@ -407,7 +432,7 @@ async function start(): Promise<void> {
 
   function renderLegend(): void {
     const legend = $("#legend");
-    const layer = state.layer ? layers.get(state.layer) : undefined;
+    const layer = state.layer ? view.layers.get(state.layer) : undefined;
     if (!layer) {
       legend.hidden = true;
       return;
@@ -428,7 +453,7 @@ async function start(): Promise<void> {
 
   // Layer menu.
   const layerList = $("#layer-list");
-  for (const layer of manifest.layers) {
+  for (const layer of view.run.manifest.layers) {
     layerList.insertAdjacentHTML(
       "beforeend",
       `<label class="option"><input type="radio" name="layer" value="${layer.id}"> ${layer.title}</label>`,
@@ -453,7 +478,7 @@ async function start(): Promise<void> {
   overlayList.insertAdjacentHTML(
     "beforeend",
     `<label class="option"><input type="checkbox" value="official" checked> 공식 태풍 예보<small>JTWC·NHC 경보 · 원은 근사 불확실성 범위</small></label>
-     <label class="option"><input type="checkbox" value="storms" checked> 모델 예상 진로<small>GFS에서 자동 추출 · 공식 예보 아님</small></label>`,
+     <label class="option"><input type="checkbox" value="storms" checked> 모델 예상 진로<small>선택한 모델에서 자동 추출 · 공식 예보 아님</small></label>`,
   );
   overlayList.addEventListener("change", async (event) => {
     const input = event.target as HTMLInputElement;
@@ -504,24 +529,29 @@ async function start(): Promise<void> {
 
   // Timeline.
   const slider = $<HTMLInputElement>("#time");
-  slider.min = String(first / HOUR);
-  slider.max = String(last / HOUR);
-  slider.step = "1";
-  const ticks = $("#ticks");
-  // One tick per local midnight.
-  const midnight = new Date(first);
-  midnight.setHours(24, 0, 0, 0);
-  for (const day = midnight; day.getTime() <= last; day.setDate(day.getDate() + 1)) {
-    const offset = ((day.getTime() - first) / (last - first)) * 100;
-    ticks.insertAdjacentHTML(
-      "beforeend",
-      `<span style="left:${offset.toFixed(2)}%">${day.getMonth() + 1}/${day.getDate()}</span>`,
-    );
+  function renderTimeline(): void {
+    const { first, last } = view;
+    slider.min = String(first / HOUR);
+    slider.max = String(last / HOUR);
+    slider.step = "1";
+    const ticks = $("#ticks");
+    ticks.innerHTML = "";
+    // One tick per local midnight.
+    const midnight = new Date(first);
+    midnight.setHours(24, 0, 0, 0);
+    for (const day = midnight; day.getTime() <= last; day.setDate(day.getDate() + 1)) {
+      const offset = ((day.getTime() - first) / (last - first)) * 100;
+      ticks.insertAdjacentHTML(
+        "beforeend",
+        `<span style="left:${offset.toFixed(2)}%">${day.getMonth() + 1}/${day.getDate()}</span>`,
+      );
+    }
   }
+  renderTimeline();
 
   function updateTime(): void {
     slider.value = String(Math.round(state.time / HOUR));
-    const lead = Math.round((state.time - runTime) / HOUR);
+    const lead = Math.round((state.time - view.runTime) / HOUR);
     const now = Math.round((state.time - Date.now()) / HOUR);
     const relative = Math.abs(now) < 1 ? "지금" : now > 0 ? `${now}시간 후` : `${-now}시간 전`;
     $("#clock").textContent = timeFormat.format(state.time);
@@ -543,7 +573,7 @@ async function start(): Promise<void> {
     const elapsed = lastFrame ? (now - lastFrame) / 1000 : 0;
     lastFrame = now;
     state.time += elapsed * PLAY_HOURS_PER_SECOND * HOUR;
-    if (state.time > last) state.time = first;
+    if (state.time > view.last) state.time = view.first;
     updateTime();
     requestAnimationFrame(tick);
   }
@@ -558,7 +588,7 @@ async function start(): Promise<void> {
   // Value at the pointer or tapped point.
   const probe = $("#probe");
   function showProbe(lngLat: maplibregl.LngLat, point: maplibregl.Point): void {
-    const layer = state.layer ? layers.get(state.layer) : undefined;
+    const layer = state.layer ? view.layers.get(state.layer) : undefined;
     if (!layer || !state.frames) {
       probe.hidden = true;
       return;
@@ -576,6 +606,39 @@ async function start(): Promise<void> {
   map.on("click", (event) => showProbe(event.lngLat, event.point));
   map.on("mouseout", () => (probe.hidden = true));
   map.on("movestart", () => (probe.hidden = true));
+
+  // Model menu.
+  const modelList = $("#model-list");
+  modelList.innerHTML = models
+    .map(
+      (name) =>
+        `<label class="option"><input type="radio" name="model" value="${name}"${name === state.model ? " checked" : ""}> ${MODEL_NAMES[name]}</label>`,
+    )
+    .join("");
+  modelList.closest("section")!.querySelector<HTMLElement>(".model-heading")!.hidden = models.length < 2;
+  modelList.hidden = models.length < 2;
+  modelList.addEventListener("change", async (event) => {
+    const name = (event.target as HTMLInputElement).value;
+    try {
+      const next = makeView(await loadLatestRun(name));
+      state.model = name;
+      view = next;
+    } catch (error) {
+      $("#status").textContent = `${name.toUpperCase()} 예보를 불러오지 못했습니다: ${(error as Error).message}`;
+      return;
+    }
+    stormMarkers.forEach((marker) => marker.remove());
+    stormMarkers.clear();
+    (map.getSource("tracks") as maplibregl.GeoJSONSource).setData(trackFeatures(view.tracks));
+    matchTracks();
+    renderStormList();
+    state.time = Math.min(view.last, Math.max(view.first, state.time));
+    state.frames = null;
+    renderRunInfo();
+    renderTimeline();
+    selectLayer(state.layer);
+    updateTime();
+  });
 
   selectLayer(state.layer);
   updateTime();

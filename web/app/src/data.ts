@@ -101,8 +101,16 @@ async function json<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function loadLatestRun(model = "gfs"): Promise<Run> {
-  const index = await json<{ models: Record<string, { latest: string }> }>(`${DATA_URL}index.json`);
+export interface Index {
+  models: Record<string, { latest: string; runs: string[] }>;
+}
+
+export function loadIndex(): Promise<Index> {
+  return json<Index>(`${DATA_URL}index.json`);
+}
+
+export async function loadLatestRun(model: string, index?: Index): Promise<Run> {
+  index ??= await loadIndex();
   const latest = index.models[model]?.latest;
   if (!latest) throw new Error(`no ${model} run published`);
   const base = `${DATA_URL}${model}/${latest}/`;
