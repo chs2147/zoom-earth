@@ -1,0 +1,96 @@
+name: Deploy Typhoon Lens
+
+# Hourly: refresh official cyclone warnings and redeploy. When a new GFS run
+# is complete (every 6 hours), rebuild its forecast frames first; otherwise
+# reuse the frames cached for that run.
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/typhoon-lens.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: typhoon-lens-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: web/pipeline
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: web/pipeline/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Find latest complete GFS run
+        id: gfs
+        run: python -c "from typhoon_lens import gfs; print(f'run={gfs.latest_complete_run():%Y%m%d%H}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore forecast frames
+        id: frames
+        uses: actions/cache/restore@v4
+        with:
+          path: web/app/public/data
+          key: typhoon-lens-gfs-${{ steps.gfs.outputs.run }}
+
+      - name: Build forecast frames
+        if: steps.frames.outputs.cache-hit != 'true'
+        run: python -m typhoon_lens.build ../app/public/data --run "${{ steps.gfs.outputs.run }}" --keep 1
+
+      - name: Save forecast frames
+        if: steps.frames.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: web/app/public/data
+          key: typhoon-lens-gfs-${{ steps.gfs.outputs.run }}
+
+      # A JTWC or NHC outage keeps the site up; the app then shows no warnings.
+      - name: Refresh official warnings
+        continue-on-error: true
+        run: python -m typhoon_lens.official ../app/public/data
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/app/package-lock.json
+
+      - name: Build site
+        working-directory: web/app
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
