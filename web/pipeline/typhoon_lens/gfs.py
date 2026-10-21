@@ -1,7 +1,7 @@
-"""Read selected GFS 0.5° fields from NOAA's public AWS bucket.
+"""NOAA GFS 0.5° source, read from NOAA's public AWS bucket.
 
-Only the GRIB messages a layer needs are downloaded, using HTTP range requests
-located through each file's .idx inventory.
+Only the GRIB messages the layers need are downloaded, using HTTP range
+requests located through each file's .idx inventory.
 """
 
 import datetime as dt
@@ -12,9 +12,25 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pygrib
 
+NAME = "gfs"
+TITLE = "NOAA GFS 0.5°"
+ATTRIBUTION = "NOAA/NCEP GFS"
 BUCKET = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
 FINAL_HOUR = 384
 USER_AGENT = "TyphoonLens/0.1 (personal, non-commercial)"
+
+# Layer field -> (GRIB variable, level, conversion to the field's unit).
+FIELDS = {
+    "u10": ("UGRD", "10 m above ground", None),
+    "v10": ("VGRD", "10 m above ground", None),
+    "gust": ("GUST", "surface", None),
+    "mslp": ("PRMSL", "mean sea level", lambda v: v / 100.0),  # Pa -> hPa
+    "t2m": ("TMP", "2 m above ground", lambda v: v - 273.15),  # K -> °C
+    "rh2m": ("RH", "2 m above ground", None),
+    "precip_rate": ("PRATE", "surface", lambda v: v * 3600.0),  # kg m-2 s-1 -> mm/h
+    "cloud": ("TCDC", "entire atmosphere", None),
+    "snow": ("CSNOW", "surface", None),
+}
 
 
 def _get(url, byte_range=None):
@@ -29,7 +45,7 @@ def file_url(run, hour):
     return f"{BUCKET}/gfs.{run:%Y%m%d}/{run:%H}/atmos/gfs.t{run:%H}z.pgrb2.0p50.f{hour:03d}"
 
 
-def forecast_hours(step_hours=3):
+def forecast_hours(run, step_hours=3):
     return list(range(0, FINAL_HOUR + 1, step_hours))
 
 
@@ -64,23 +80,26 @@ def _instantaneous(kind):
     return kind == "anl" or re.fullmatch(r"\d+ hour fcst", kind) is not None
 
 
-def read_fields(run, hour, wanted):
-    """{(variable, level): 2-D array} on a -180..179.5°E, 90..-90°N grid."""
+def read_fields(run, hour):
+    """{field: 2-D array} in layer units on the common 0.5° grid."""
+    wanted = {(variable, level) for variable, level, _ in FIELDS.values()}
     entries = {
         (variable, level): (start, end)
         for variable, level, kind, start, end in _inventory(run, hour)
         if (variable, level) in wanted and _instantaneous(kind)
     }
-    missing = set(wanted) - set(entries)
+    missing = wanted - set(entries)
     if missing:
-        raise RuntimeError(f"f{hour:03d} is missing {sorted(missing)}")
+        raise RuntimeError(f"GFS f{hour:03d} is missing {sorted(missing)}")
 
-    def fetch(key):
-        start, end = entries[key]
+    def fetch(name):
+        variable, level, convert = FIELDS[name]
+        start, end = entries[(variable, level)]
         message = pygrib.fromstring(_get(file_url(run, hour), (start, "" if end is None else end)))
         values = np.asarray(message.values, dtype=np.float32)
         # GFS longitudes run 0..359.5; centre the grid on the prime meridian.
-        return key, np.roll(values, values.shape[1] // 2, axis=1)
+        values = np.roll(values, values.shape[1] // 2, axis=1)
+        return name, convert(values) if convert else values
 
     with ThreadPoolExecutor(max_workers=6) as pool:
-        return dict(pool.map(fetch, wanted))
+        return dict(pool.map(fetch, FIELDS))

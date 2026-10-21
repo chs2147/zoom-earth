@@ -128,13 +128,38 @@ def parse_tcw(text, source_url):
         year_prefix = lines[2].strip()[:2]
 
     storm["history"] = _history(lines, year_prefix)
+    _apply_central_pressure(storm, text)
+    base_url = source_url.rsplit(".", 1)[0]
+    storm["links"] = {
+        "warning": base_url + "web.txt",
+        "graphic": base_url + ".gif",
+    }
     latest = storm["forecast"][0] if storm["forecast"] else (storm["history"][-1] if storm["history"] else None)
     if latest is None:
         raise ValueError(f"{storm_id}: no position")
-    storm["position"] = {k: latest[k] for k in ("lat", "lon", "wind_kt")} | {"time": latest["time"]}
+    storm["position"] = {k: latest[k] for k in ("lat", "lon", "wind_kt")} | {
+        "time": latest["time"],
+        "pressure_hpa": latest.get("pressure_hpa"),
+    }
     storm["cone"] = cone(storm["forecast"]) if len(storm["forecast"]) > 1 else None
     storm["wind_field"] = wind_field(storm["forecast"][0]) if storm["forecast"] else None
     return storm
+
+
+def _apply_central_pressure(storm, text):
+    """Attach 'MINIMUM CENTRAL PRESSURE AT DDHHMMZ IS NNN MB' to that fix.
+
+    JMV files carry pressure only in this remark, for the warning time; past
+    fixes and forecast points have none.
+    """
+    match = re.search(r"MINIMUM CENTRAL PRESSURE AT (\d{2})(\d{2})\d{2}Z IS (\d+) MB", text)
+    if not match:
+        return
+    day, hour, pressure = int(match[1]), int(match[2]), int(match[3])
+    for point in storm["history"] + storm["forecast"]:
+        moment = dt.datetime.strptime(point["time"], "%Y-%m-%dT%H:%MZ")
+        if moment.day == day and moment.hour == hour:
+            point["pressure_hpa"] = pressure
 
 
 def _cone_radius_nm(hour):

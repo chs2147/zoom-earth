@@ -20,7 +20,8 @@ export class FrameCache {
   constructor(private run: Run) {}
 
   get(layer: string, hour: number): Promise<Frame> {
-    const key = `${layer}/${hour}`;
+    // Keys include the run, so GPU textures never mix models or runs.
+    const key = `${this.run.base}${layer}/${hour}`;
     let entry = this.entries.get(key);
     if (entry) {
       // Refresh recency.
