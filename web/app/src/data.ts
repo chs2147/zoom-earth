@@ -135,3 +135,27 @@ export async function loadOfficial(): Promise<Official | null> {
     return null;
   }
 }
+
+export interface GibsOverlay {
+  tiles: string[];
+  maxzoom: number;
+  date: string;
+  note: string;
+  attribution: string;
+}
+
+export interface ObservationOverlays {
+  generated: string;
+  satellite: GibsOverlay | null;
+  fires: GibsOverlay | null;
+  radar: { available: boolean };
+}
+
+// Optional: a missing file leaves satellite and fire layers unavailable.
+export async function loadOverlays(): Promise<ObservationOverlays | null> {
+  try {
+    return await json<ObservationOverlays>(`${DATA_URL}overlays.json`);
+  } catch {
+    return null;
+  }
+}

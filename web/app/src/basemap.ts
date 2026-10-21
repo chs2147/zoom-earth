@@ -4,6 +4,7 @@
 
 import type { FeatureCollection, MultiLineString } from "geojson";
 import type { StyleSpecification } from "maplibre-gl";
+import type { ObservationOverlays } from "./data";
 import { feature, mesh } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 
@@ -48,10 +49,6 @@ export async function baseStyle(): Promise<StyleSpecification> {
   };
 }
 
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 export interface Overlay {
   id: string;
   title: string;
@@ -60,22 +57,40 @@ export interface Overlay {
   opacity: number;
 }
 
+// GIBS layers chosen at deploy time by pipeline/typhoon_lens/overlays.py,
+// which probes for a satellite and date that actually return imagery.
+let observations: ObservationOverlays | null = null;
+
+export function configureOverlays(info: ObservationOverlays | null): void {
+  observations = info;
+  for (const overlay of OVERLAYS) {
+    const source = info?.[overlay.id as "satellite" | "fires"];
+    if (source && "note" in source) overlay.note = source.note;
+    else if (info && (overlay.id === "satellite" || overlay.id === "fires") && !source) {
+      overlay.note = "지금은 사용할 수 있는 영상이 없습니다";
+    }
+  }
+}
+
+function gibsSource(id: "satellite" | "fires") {
+  return async () => {
+    const source = observations?.[id];
+    if (!source) {
+      throw new Error(
+        observations ? "배포 시점에 사용할 수 있는 영상을 찾지 못했습니다" : "관측 레이어 정보(overlays.json)가 없습니다",
+      );
+    }
+    return { tiles: source.tiles, maxzoom: source.maxzoom, attribution: source.attribution };
+  };
+}
+
 export const OVERLAYS: Overlay[] = [
   {
     id: "satellite",
     title: "위성 (트루컬러)",
-    note: "NASA GIBS VIIRS · 전날 합성 영상",
+    note: "NASA GIBS · 하루 합성 영상",
     opacity: 1,
-    tiles: async () => {
-      const day = isoDate(new Date(Date.now() - 24 * 3600 * 1000));
-      return {
-        tiles: [
-          `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${day}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
-        ],
-        maxzoom: 9,
-        attribution: "NASA GIBS / VIIRS",
-      };
-    },
+    tiles: gibsSource("satellite"),
   },
   {
     id: "radar",
@@ -97,18 +112,9 @@ export const OVERLAYS: Overlay[] = [
   {
     id: "fires",
     title: "산불 (열점)",
-    note: "NASA GIBS VIIRS 열이상 · 전날",
+    note: "NASA GIBS 열이상",
     opacity: 1,
-    tiles: async () => {
-      const day = isoDate(new Date(Date.now() - 24 * 3600 * 1000));
-      return {
-        tiles: [
-          `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_Thermal_Anomalies_375m_All/default/${day}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
-        ],
-        maxzoom: 8,
-        attribution: "NASA FIRMS / GIBS",
-      };
-    },
+    tiles: gibsSource("fires"),
   },
 ];
 
