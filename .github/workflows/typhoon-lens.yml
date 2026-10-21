@@ -1,17 +1,31 @@
 name: Deploy Typhoon Lens
 
-# Hourly: refresh official cyclone warnings and redeploy. When a new GFS run
-# (every 6 hours) or ICON 00Z/12Z run is complete, build its forecast frames
-# first; otherwise reuse the frames cached for that run.
+# The control server (web/control, on Vercel) decides when to deploy: it
+# watches each model's source and starts this workflow with the model runs to
+# carry, or hourly to refresh official warnings and overlays. Frames for a run
+# are built once and reused from the Actions cache afterwards. A run left
+# empty is looked up here (manual runs); "skip" leaves an optional model out.
 on:
-  schedule:
-    - cron: "17 * * * *"
   workflow_dispatch:
+    inputs:
+      reason:
+        description: Why the deploy was started (shown in the run title)
+        default: ""
+      gfs_run:
+        description: GFS run YYYYMMDDHH (empty = latest complete)
+        default: ""
+      icon_run:
+        description: ICON run YYYYMMDDHH (empty = latest complete, skip = leave out)
+        default: ""
   push:
     branches: [main]
     paths:
-      - "web/**"
+      - "web/app/**"
+      - "web/pipeline/**"
       - ".github/workflows/typhoon-lens.yml"
+
+# The control server reads the model runs back from this title.
+run-name: ${{ inputs.reason && format('Typhoon Lens · {0} · gfs {1} · icon {2}', inputs.reason, inputs.gfs_run || 'auto', inputs.icon_run || 'auto') || '' }}
 
 permissions:
   contents: read
@@ -40,11 +54,20 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Find latest complete model runs
+      - name: Choose model runs
         id: runs
+        env:
+          GFS_RUN: ${{ inputs.gfs_run }}
+          ICON_RUN: ${{ inputs.icon_run }}
         run: |
-          echo "gfs=$(python -m typhoon_lens.build ../app/public/data --model gfs --latest)" >> "$GITHUB_OUTPUT"
-          echo "icon=$(python -m typhoon_lens.build ../app/public/data --model icon --latest || true)" >> "$GITHUB_OUTPUT"
+          [[ "$GFS_RUN" =~ ^([0-9]{10})?$ ]] || { echo "invalid GFS run: $GFS_RUN"; exit 1; }
+          [[ "$ICON_RUN" =~ ^([0-9]{10}|skip)?$ ]] || { echo "invalid ICON run: $ICON_RUN"; exit 1; }
+          gfs="${GFS_RUN:-$(python -m typhoon_lens.build ../app/public/data --model gfs --latest)}"
+          icon="${ICON_RUN:-$(python -m typhoon_lens.build ../app/public/data --model icon --latest || true)}"
+          [ "$icon" = skip ] && icon=""
+          echo "gfs=$gfs" >> "$GITHUB_OUTPUT"
+          echo "icon=$icon" >> "$GITHUB_OUTPUT"
+          echo "GFS $gfs, ICON ${icon:-none}"
 
       - name: Restore GFS frames
         id: gfs
