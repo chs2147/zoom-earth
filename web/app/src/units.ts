@@ -15,17 +15,19 @@ const WIND_UNITS: Record<WindUnit, { label: string; perMs: number }> = {
 export interface Settings {
   windUnit: WindUnit;
   windAnimation: boolean;
+  landmarks: boolean;
 }
 
 const STORAGE_KEY = "typhoon-lens-settings";
 
 export function loadSettings(): Settings {
-  const defaults: Settings = { windUnit: "kmh", windAnimation: true };
+  const defaults: Settings = { windUnit: "kmh", windAnimation: true, landmarks: true };
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as Partial<Settings>;
     return {
       windUnit: stored.windUnit && stored.windUnit in WIND_UNITS ? stored.windUnit : defaults.windUnit,
       windAnimation: typeof stored.windAnimation === "boolean" ? stored.windAnimation : defaults.windAnimation,
+      landmarks: typeof stored.landmarks === "boolean" ? stored.landmarks : defaults.landmarks,
     };
   } catch {
     return defaults;
