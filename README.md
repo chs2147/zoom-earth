@@ -92,6 +92,7 @@ zoom-earth/
 ├── tools/           # 타일 디코더, 진로 추출·그림 스크립트
 ├── web/             # Typhoon Lens (pipeline: Python, app: TypeScript, control: Vercel 운영 서버)
 ├── ROADMAP.md       # 앞으로 할 일
+├── CLAUDE.md        # 작업 규칙(README 버전 정보 자동 기록)
 ├── .claude/         # 클라우드 세션용 REA 설치 훅
 └── .github/workflows/typhoon-lens.yml   # 데이터 생성·배포
 ```
