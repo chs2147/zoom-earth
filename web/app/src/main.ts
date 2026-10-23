@@ -120,11 +120,12 @@ let reloading = false;
 let sharing = false;
 let hiddenAt = 0;
 
-function reloadAtNow(): void {
+function reloadAtNow(overrides: Record<string, string> = {}): void {
   if (reloading) return;
   reloading = true;
   const params = new URLSearchParams(location.hash.slice(1));
   params.delete("t");
+  for (const [key, value] of Object.entries(overrides)) params.set(key, value);
   const hash = params.toString();
   history.replaceState(null, "", hash ? `#${hash}` : location.pathname + location.search);
   location.reload();
@@ -139,6 +140,40 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) reloadAtNow();
 });
+
+// A failed forecast load reloads the page too: a page kept open while a
+// deploy replaced its run asks for deleted frames. Reloads are at least
+// RELOAD_GAP apart, so a site or network outage retries at that pace
+// instead of looping; without session storage every reload waits the gap.
+const RELOAD_GAP = 2 * 60 * 1000;
+const RELOAD_KEY = "typhoonLens.errorReloadAt";
+let retryTimer = 0;
+
+function reloadAfterLoadError(overrides: Record<string, string> = {}): void {
+  let last = Date.now();
+  try {
+    last = Number(sessionStorage.getItem(RELOAD_KEY) ?? 0);
+  } catch {
+    // Storage blocked: keep `last` at now so this waits the full gap.
+  }
+  const wait = last + RELOAD_GAP - Date.now();
+  if (wait <= 0) {
+    try {
+      sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+    } catch {
+      // Without storage the next failure waits the full gap.
+    }
+    reloadAtNow(overrides);
+    return;
+  }
+  $("#status").textContent = `예보 데이터를 불러오지 못했습니다. ${Math.ceil(wait / 60_000)}분 안에 다시 불러옵니다.`;
+  if (!retryTimer) {
+    retryTimer = window.setTimeout(() => {
+      retryTimer = 0;
+      reloadAfterLoadError(overrides);
+    }, wait);
+  }
+}
 
 // JTWC amplifying remarks such as "120HR BECOMING EXTRATROPICAL".
 const REMARK_PHRASES: [RegExp, string][] = [
@@ -197,7 +232,8 @@ async function start(): Promise<void> {
     state.model = models.includes(wanted) ? wanted : models.includes("gfs") ? "gfs" : models[0];
     run = await loadLatestRun(state.model, index);
   } catch (error) {
-    $("#status").textContent = `예보 데이터를 불러오지 못했습니다: ${(error as Error).message}`;
+    console.warn(error);
+    reloadAfterLoadError();
     return;
   }
   if (hash.layer && SCALES[hash.layer]) state.layer = hash.layer;
@@ -592,10 +628,18 @@ async function start(): Promise<void> {
     const [a, b] = [steps[index - 1], steps[index]];
     const ratio = Math.min(1, Math.max(0, (state.time - a.time) / (b.time - a.time)));
     // Gusts still animate with the wind vectors.
-    const [pair, windPair] = await Promise.all([
-      Promise.all([frames.get(layer.id, a.hour), frames.get(layer.id, b.hour)]),
-      layer.id === "gust" ? Promise.all([frames.get("wind", a.hour), frames.get("wind", b.hour)]) : Promise.resolve(null),
-    ]);
+    let pair: [Frame, Frame];
+    let windPair: [Frame, Frame] | null;
+    try {
+      [pair, windPair] = await Promise.all([
+        Promise.all([frames.get(layer.id, a.hour), frames.get(layer.id, b.hour)]),
+        layer.id === "gust" ? Promise.all([frames.get("wind", a.hour), frames.get("wind", b.hour)]) : Promise.resolve(null),
+      ]);
+    } catch (error) {
+      console.warn(error);
+      if (current === request) reloadAfterLoadError();
+      return;
+    }
     if (current !== request) return;
     state.frames = pair;
     state.windFrames = layer.id === "wind" ? pair : windPair;
@@ -778,6 +822,8 @@ async function start(): Promise<void> {
     } catch (error) {
       toast(`${name.toUpperCase()} 예보를 불러오지 못했습니다`);
       console.warn(error);
+      // Reload into the chosen model; the site may have published new runs.
+      reloadAfterLoadError({ model: name });
       return;
     }
     stormMarkers.forEach((marker) => marker.remove());
