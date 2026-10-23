@@ -267,10 +267,12 @@ async function start(): Promise<void> {
     const cycle = `${runDate.getUTCDate()}일 ${String(runDate.getUTCHours()).padStart(2, "0")}Z`;
     const days = Math.round(((view.last - view.runTime) / HOUR / 24) * 10) / 10;
     const generated = Date.parse(view.run.manifest.generated);
-    $("#run").innerHTML =
-      `<span class="run-main"><strong>${MODELS[state.model]?.name ?? view.label}</strong> ${runFormat.format(runDate)} 기준 (${cycle}) · ${days}일 예보</span>` +
-      (Number.isFinite(generated) ? `<span class="run-updated">업데이트 ${updatedFormat.format(generated)}</span>` : "");
+    const name = MODELS[state.model]?.name ?? view.label;
+    $("#run").innerHTML = `<strong>${name}</strong> ${runFormat.format(runDate)} 기준 (${cycle}) · ${days}일 예보`;
     $("#run").title = view.run.manifest.title;
+    const updated = $("#run-updated");
+    updated.hidden = !Number.isFinite(generated);
+    if (!updated.hidden) updated.textContent = `${name} 업데이트 ${updatedFormat.format(generated)}`;
   }
   renderRunInfo();
   $("#status").textContent = "";
@@ -297,6 +299,10 @@ async function start(): Promise<void> {
       customAttribution: "NOAA GFS · DWD ICON · JTWC · NHC · NASA GIBS · RainViewer · Natural Earth",
     }),
     "bottom-left",
+  );
+  // Start the data credits collapsed; the (i) button opens them.
+  map.once("load", () =>
+    document.querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show"),
   );
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
   map.addControl(
@@ -795,12 +801,25 @@ async function start(): Promise<void> {
     setSidebar(open);
   });
 
-  // Model switch. On phones it sits above the timeline, whose height changes
-  // with the clock text and legend.
+  // Model switch and update time. They sit right of the timeline when there
+  // is room, otherwise above it (always on phones), so the two never overlap.
   const timelineElement = $(".timeline");
-  new ResizeObserver(() =>
-    document.documentElement.style.setProperty("--timeline-height", `${timelineElement.offsetHeight}px`),
-  ).observe(timelineElement);
+  const dock = $("#model-dock");
+  function layoutDock(): void {
+    const root = document.documentElement;
+    root.style.setProperty("--timeline-height", `${timelineElement.offsetHeight}px`);
+    dock.classList.remove("stacked");
+    if (narrow.matches) return;
+    const timelineBox = timelineElement.getBoundingClientRect();
+    if (dock.getBoundingClientRect().left < timelineBox.right + 12) {
+      root.style.setProperty("--dock-right", `${window.innerWidth - timelineBox.right}px`);
+      dock.classList.add("stacked");
+    }
+  }
+  const layoutObserver = new ResizeObserver(layoutDock);
+  layoutObserver.observe(timelineElement);
+  layoutObserver.observe(dock);
+  window.addEventListener("resize", layoutDock);
   const modelSwitch = $("#model-switch");
   function renderModelSwitch(): void {
     modelSwitch.hidden = models.length < 2;
