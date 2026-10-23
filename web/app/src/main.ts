@@ -14,6 +14,7 @@ import {
   type Track,
 } from "./data";
 import { FieldLayer } from "./fieldLayer";
+import { LANDMARKS, landmarkSize, landmarksVisible } from "./landmarks";
 import { FrameCache, sampleFrame, type Frame } from "./frames";
 import { cssGradient, SCALES, scaleCoordinate } from "./palettes";
 import { WindParticles } from "./particles";
@@ -316,13 +317,36 @@ async function start(): Promise<void> {
   map.addLayer(field, FIRST_LINE_LAYER);
   const particles = new WindParticles(map);
 
-  // City labels with the current value of the selected map.
+  // City labels with the current value of the selected map, and a miniature
+  // landmark above the name once zoomed in to a 200 km scale or closer.
   const places = PLACES.map(([name, lat, lon]) => {
     const element = document.createElement("div");
     element.className = "place";
-    element.innerHTML = `<span class="place-name">${name}</span><span class="place-value" hidden></span>`;
+    const landmark = LANDMARKS[name];
+    element.innerHTML =
+      (landmark ? `<span class="place-landmark" title="${landmark.name}">${landmark.svg}</span>` : "") +
+      `<span class="place-name">${name}</span><span class="place-value" hidden></span>`;
     new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat([lon, lat]).addTo(map);
     return { lat, lon, value: element.querySelector<HTMLElement>(".place-value")! };
+  });
+
+  const mapContainer = map.getContainer();
+  function updateLandmarks(): void {
+    const { lat } = map.getCenter();
+    const zoom = map.getZoom();
+    const on = settings.landmarks && landmarksVisible(zoom, lat);
+    mapContainer.classList.toggle("landmarks-on", on);
+    if (on) mapContainer.style.setProperty("--landmark-size", `${landmarkSize(zoom, lat)}px`);
+  }
+  map.on("move", updateLandmarks);
+  updateLandmarks();
+
+  const landmarkToggle = $<HTMLInputElement>("#landmark-toggle");
+  landmarkToggle.checked = settings.landmarks;
+  landmarkToggle.addEventListener("change", () => {
+    settings.landmarks = landmarkToggle.checked;
+    saveSettings(settings);
+    updateLandmarks();
   });
 
   function updatePlaceValues(): void {
