@@ -82,6 +82,8 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 | [#16](https://github.com/chs2147/zoom-earth/pull/16) | 2026-10-23 | **v0.2.0** 예보 데이터 불러오기 실패 시 자동 새로고침 |
 | [#17](https://github.com/chs2147/zoom-earth/pull/17) | 2026-10-23 | README 버전 정보(v0.2.0), 운영 방식 문서 정정 |
 | [#18](https://github.com/chs2147/zoom-earth/pull/18) | 2026-10-23 | **v0.2.1** 업데이트 시각을 모델 선택 위 별도 박스로 이동, 모델 선택과 타임라인 겹침 방지, 출처 표시 기본 접힘 |
+| [#19](https://github.com/chs2147/zoom-earth/pull/19) | 2026-10-23 | README 버전 정보(v0.2.1) |
+| [#20](https://github.com/chs2147/zoom-earth/pull/20) | 2026-10-23 | 개선·기능 추가 시 README 버전 정보를 자동으로 기록하는 작업 규칙(`CLAUDE.md`) |
 
 ## 저장소 구성
 
@@ -92,6 +94,7 @@ zoom-earth/
 ├── tools/           # 타일 디코더, 진로 추출·그림 스크립트
 ├── web/             # Typhoon Lens (pipeline: Python, app: TypeScript, control: Vercel 운영 서버)
 ├── ROADMAP.md       # 앞으로 할 일
+├── CLAUDE.md        # 작업 규칙(README 버전 정보 자동 기록)
 ├── .claude/         # 클라우드 세션용 REA 설치 훅
 └── .github/workflows/typhoon-lens.yml   # 데이터 생성·배포
 ```
