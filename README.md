@@ -44,7 +44,7 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 
 ## 버전 정보
 
-현재 버전은 **Typhoon Lens v0.2.0**(2026-10-23)입니다.
+현재 버전은 **Typhoon Lens v0.2.1**(2026-10-23)입니다.
 - 웹 앱: https://chs2147.github.io/zoom-earth/ (GitHub Pages)
 - 운영 서버: v0.1.0, https://typhoon-lens-swart.vercel.app/ (Vercel)
 
@@ -80,6 +80,8 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 | [#14](https://github.com/chs2147/zoom-earth/pull/14) | 2026-10-21 | POST만 보내는 스케줄러(Upstash QStash)용 `/api/tick` POST 지원 |
 | [#15](https://github.com/chs2147/zoom-earth/pull/15) | 2026-10-23 | 지도 윤곽선 가시성, 모델 기준 시각 표시, 백그라운드 복귀 시 새로고침, 휴대폰 모델 전환 버튼 가림 수정 |
 | [#16](https://github.com/chs2147/zoom-earth/pull/16) | 2026-10-23 | **v0.2.0** 예보 데이터 불러오기 실패 시 자동 새로고침 |
+| [#17](https://github.com/chs2147/zoom-earth/pull/17) | 2026-10-23 | README 버전 정보(v0.2.0), 운영 방식 문서 정정 |
+| [#18](https://github.com/chs2147/zoom-earth/pull/18) | 2026-10-23 | **v0.2.1** 업데이트 시각을 모델 선택 위 별도 박스로 이동, 모델 선택과 타임라인 겹침 방지, 출처 표시 기본 접힘 |
 
 ## 저장소 구성
 
