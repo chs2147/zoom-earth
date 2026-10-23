@@ -36,15 +36,17 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 | 예보 모델 | GFS 16일(384시간), ICON 7.5일(180시간) 전환 |
 | 태풍 | JTWC·NHC 공식 예보 진로·강풍 반경·불확실성 범위, 모델 자동 추적 진로, 시각별 상세 표 |
 | 관측 | 위성(NASA GIBS VIIRS), 강수 레이더(RainViewer), 산불 열점 |
-| 사용성 | 타임라인 재생, 도시별 값·풍향, 바람 흐름 애니메이션, 공유 링크, 풍속 단위 설정, 모바일 화면 |
-| 자동 갱신 | 운영 서버(Railway 상시 실행)가 10분마다 모델별 새 실행을 확인해 배포를 시작하고, 1시간마다 공식 경보를 갱신. 변환·배포는 GitHub Actions → GitHub Pages |
+| 사용성 | 타임라인 재생, 도시별 값·풍향, 바람 흐름 애니메이션, 공유 링크, 풍속 단위 설정, 모바일 화면, 모델 기준 시각·업데이트 시각 표시, 백그라운드 복귀·불러오기 실패 시 현재 시각으로 자동 새로고침 |
+| 자동 갱신 | Upstash QStash가 30분마다 Vercel 운영 서버를 호출. 서버가 모델별 새 실행을 확인해 배포를 시작하고, 1시간 넘게 배포가 없으면 공식 경보를 갱신. 변환·배포는 GitHub Actions → GitHub Pages. 같은 서버를 Railway 등에서 상시 실행할 수도 있음 |
 | 운영 관리 | 관리 화면에서 모델별 상태(배포된 실행·원본 최신 실행·다음 실행 예상), 최근 배포 작업, 지금 점검·재배포·재시도 |
 
 자세한 구조와 실행 방법은 [`web/README.md`](web/README.md), 운영 서버는 [`web/control/README.md`](web/control/README.md)에 있습니다. 앞으로 할 일(한국 KIM·일본 GSM 모델 추가 등)은 [`ROADMAP.md`](ROADMAP.md)에 있습니다.
 
 ## 버전 정보
 
-현재 버전은 **Typhoon Lens v0.1.0**이고, 2026-10-21에 GitHub Pages로 배포됐습니다.
+현재 버전은 **Typhoon Lens v0.2.0**(2026-10-23)입니다.
+- 웹 앱: https://chs2147.github.io/zoom-earth/ (GitHub Pages)
+- 운영 서버: v0.1.0, https://typhoon-lens-swart.vercel.app/ (Vercel)
 
 ### 사용 구성요소
 
@@ -53,9 +55,10 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 | REA (`rea-agents`) | 6.7.0: 분석에 사용한 npm CLI (저장소 [chs2147/rea](https://github.com/chs2147/rea) 6.4.0 기준으로도 설치) |
 | MapLibre GL JS | 4.7.1 |
 | Vite / TypeScript | 5.4.21 / 5.6.3 |
-| Node.js | 22 |
+| Node.js | 22 (웹 앱 빌드, 운영 서버) |
 | Python / pygrib | 3.12 / 2.1 |
 | 예보 데이터 | NOAA GFS 0.5° (6시간 주기), DWD ICON 전구 13 km (00·12Z) |
+| 운영 | Vercel(운영 서버, Hobby), Upstash QStash(30분 주기 호출), GitHub Actions(변환·배포), GitHub Pages(웹 앱·데이터) |
 
 ### 변경 이력
 
@@ -70,6 +73,13 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 | [#7](https://github.com/chs2147/zoom-earth/pull/7) | 2026-10-21 | 위성 레이어 자동 선택, 링크 미리보기, 홈 화면 아이콘 |
 | [#8](https://github.com/chs2147/zoom-earth/pull/8) | 2026-10-21 | 산불 레이어 WMS 대체 경로 |
 | [#9](https://github.com/chs2147/zoom-earth/pull/9) | 2026-10-21 | 모델 실행 완성 여부를 모든 파일 기준으로 판단 |
+| [#10](https://github.com/chs2147/zoom-earth/pull/10) | 2026-10-21 | README 프로젝트 소개, 버전 정보, REA 기반 비상업용 Disclaimer |
+| [#11](https://github.com/chs2147/zoom-earth/pull/11) | 2026-10-21 | **운영 서버 v0.1.0**: 모델별 새 실행 감지·배포 시작·재시도·관리 화면(Vercel), workflow가 모델 실행을 입력으로 받음, 로드맵 |
+| [#12](https://github.com/chs2147/zoom-earth/pull/12) | 2026-10-21 | Vercel Hobby에서 배포되도록 Cron을 하루 1회 예비용으로 변경 |
+| [#13](https://github.com/chs2147/zoom-earth/pull/13) | 2026-10-21 | 상시 실행 서버(`server.js`, Railway용) |
+| [#14](https://github.com/chs2147/zoom-earth/pull/14) | 2026-10-21 | POST만 보내는 스케줄러(Upstash QStash)용 `/api/tick` POST 지원 |
+| [#15](https://github.com/chs2147/zoom-earth/pull/15) | 2026-10-23 | 지도 윤곽선 가시성, 모델 기준 시각 표시, 백그라운드 복귀 시 새로고침, 휴대폰 모델 전환 버튼 가림 수정 |
+| [#16](https://github.com/chs2147/zoom-earth/pull/16) | 2026-10-23 | **v0.2.0** 예보 데이터 불러오기 실패 시 자동 새로고침 |
 
 ## 저장소 구성
 
