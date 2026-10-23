@@ -85,6 +85,7 @@ REA로 Zoom Earth 웹사이트를 분석했습니다.
 | [#18](https://github.com/chs2147/zoom-earth/pull/18) | 2026-10-23 | **v0.2.1** 업데이트 시각을 모델 선택 위 별도 박스로 이동, 모델 선택과 타임라인 겹침 방지, 출처 표시 기본 접힘 |
 | [#19](https://github.com/chs2147/zoom-earth/pull/19) | 2026-10-23 | README 버전 정보(v0.2.1) |
 | [#20](https://github.com/chs2147/zoom-earth/pull/20) | 2026-10-23 | 개선·기능 추가 시 README 버전 정보를 자동으로 기록하는 작업 규칙(`CLAUDE.md`) |
+| [#21](https://github.com/chs2147/zoom-earth/pull/21) | 2026-10-23 | **v0.3.0** 도시 랜드마크 미니어처 아이콘(21개 도시, 축척 200 km 이하에서 표시, 메뉴에서 끄기) |
 
 ## 저장소 구성
 
