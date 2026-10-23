@@ -104,6 +104,27 @@ a:focus-visible {
   color: var(--muted);
 }
 
+#run {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+#run strong {
+  color: var(--text);
+}
+
+.run-main {
+  color: var(--text);
+}
+
+.run-updated {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .menu-only {
   display: none;
 }
@@ -957,12 +978,19 @@ a:focus-visible {
   .model-switch {
     right: auto;
     left: var(--gutter);
-    bottom: calc(var(--bottom) + 146px);
+    /* Above the timeline, whose height main.ts tracks in --timeline-height. */
+    bottom: calc(var(--bottom) + var(--timeline-height, 138px) + 8px);
   }
 
   .model-switch button {
     min-height: 34px;
     padding: 4px 12px;
+  }
+
+  /* A wrapped date makes the timeline card taller and covers the model switch. */
+  #clock {
+    font-size: 15px;
+    white-space: nowrap;
   }
 
   #coordinates {
