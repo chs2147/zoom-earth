@@ -105,24 +105,44 @@ a:focus-visible {
 }
 
 #run {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
   font-size: 12px;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
-#run strong {
-  color: var(--text);
+.model-dock {
+  position: fixed;
+  right: calc(var(--gutter) + 56px);
+  bottom: calc(var(--bottom) + 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 2;
 }
 
-.run-main {
-  color: var(--text);
+/* Not enough room beside the timeline: sit above it, right edges aligned.
+   main.ts sets both variables. */
+.model-dock.stacked {
+  right: var(--dock-right, calc(var(--gutter) + 56px));
+  bottom: calc(var(--bottom) + var(--timeline-height, 138px) + 8px);
 }
 
-.run-updated {
-  font-size: 11px;
+.model-updated {
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.model-updated[hidden] {
+  display: none;
 }
 
 .menu-only {
@@ -712,9 +732,6 @@ a:focus-visible {
 /* Bottom: model switch, coordinates, timeline, legend */
 
 .model-switch {
-  position: fixed;
-  right: calc(var(--gutter) + 56px);
-  bottom: calc(var(--bottom) + 10px);
   display: flex;
   padding: 3px;
   border-radius: 999px;
@@ -975,9 +992,10 @@ a:focus-visible {
     max-height: 34vh;
   }
 
-  .model-switch {
+  .model-dock {
     right: auto;
     left: var(--gutter);
+    align-items: flex-start;
     /* Above the timeline, whose height main.ts tracks in --timeline-height. */
     bottom: calc(var(--bottom) + var(--timeline-height, 138px) + 8px);
   }
