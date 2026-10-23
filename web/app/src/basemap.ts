@@ -3,7 +3,7 @@
 // browser from public NASA GIBS and RainViewer endpoints.
 
 import type { FeatureCollection, MultiLineString } from "geojson";
-import type { StyleSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, StyleSpecification } from "maplibre-gl";
 import type { ObservationOverlays } from "./data";
 import { feature, mesh } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
@@ -11,9 +11,16 @@ import type { GeometryCollection, Topology } from "topojson-specification";
 export const COLORS = {
   water: "#0d1117",
   land: "#1c2129",
-  coast: "#6b7480",
-  border: "#454c57",
+  coast: "#e8ebf0",
+  coastCasing: "#05070a",
+  border: "#c3c8d0",
 };
+
+// Lowest line layer; overlays and the forecast field are inserted below it.
+export const FIRST_LINE_LAYER = "coast-casing";
+
+// Line width grows with zoom so outlines stay legible when zoomed in.
+const width = (base: number): ExpressionSpecification => ["interpolate", ["linear"], ["zoom"], 1, base, 6, base * 2];
 
 // Natural Earth topology loads as separate chunks so it downloads in
 // parallel with the app and caches independently.
@@ -37,13 +44,26 @@ export async function baseStyle(): Promise<StyleSpecification> {
     layers: [
       { id: "water", type: "background", paint: { "background-color": COLORS.water } },
       { id: "land", type: "fill", source: "land", paint: { "fill-color": COLORS.land } },
-      // Overlays and the forecast field are inserted before "coast".
-      { id: "coast", type: "line", source: "coast", paint: { "line-color": COLORS.coast, "line-width": 0.8 } },
+      // A dark casing under a light line keeps coasts visible over any colour.
+      {
+        id: FIRST_LINE_LAYER,
+        type: "line",
+        source: "coast",
+        paint: { "line-color": COLORS.coastCasing, "line-opacity": 0.6, "line-width": width(2.4) },
+        layout: { "line-join": "round" },
+      },
+      {
+        id: "coast",
+        type: "line",
+        source: "coast",
+        paint: { "line-color": COLORS.coast, "line-opacity": 0.9, "line-width": width(1) },
+        layout: { "line-join": "round" },
+      },
       {
         id: "borders",
         type: "line",
         source: "borders",
-        paint: { "line-color": COLORS.border, "line-width": 0.6, "line-dasharray": [3, 2] },
+        paint: { "line-color": COLORS.border, "line-opacity": 0.75, "line-width": width(0.8), "line-dasharray": [3, 2] },
       },
     ],
   };

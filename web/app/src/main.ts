@@ -2,7 +2,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
-import { baseStyle, configureOverlays, OVERLAYS, PLACES } from "./basemap";
+import { baseStyle, configureOverlays, FIRST_LINE_LAYER, OVERLAYS, PLACES } from "./basemap";
 import {
   loadIndex,
   loadLatestRun,
@@ -104,6 +104,41 @@ const listFormat = new Intl.DateTimeFormat("ko-KR", {
   hour12: true,
 });
 const shortTime = new Intl.DateTimeFormat("ko-KR", { day: "numeric", hour: "numeric", hour12: false });
+const runFormat = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", hour: "numeric", hour12: false });
+const updatedFormat = new Intl.DateTimeFormat("ko-KR", {
+  month: "long",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+// Returning to a page left in the background reloads it at the current
+// time. A long-idle page can point at a model run a later deploy replaced
+// (old frames are deleted), which made frame loads fail.
+let reloading = false;
+let sharing = false;
+let hiddenAt = 0;
+
+function reloadAtNow(): void {
+  if (reloading) return;
+  reloading = true;
+  const params = new URLSearchParams(location.hash.slice(1));
+  params.delete("t");
+  const hash = params.toString();
+  history.replaceState(null, "", hash ? `#${hash}` : location.pathname + location.search);
+  location.reload();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") hiddenAt = Date.now();
+  // The system share sheet hides the page too; that is not leaving it.
+  else if (hiddenAt && !sharing) reloadAtNow();
+});
+// Pages restored from the back/forward cache skip the load event.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) reloadAtNow();
+});
 
 // JTWC amplifying remarks such as "120HR BECOMING EXTRATROPICAL".
 const REMARK_PHRASES: [RegExp, string][] = [
@@ -189,10 +224,17 @@ async function start(): Promise<void> {
   const startTime = Number.isFinite(wantedTime) ? wantedTime : Math.round(Date.now() / HOUR) * HOUR;
   state.time = Math.min(view.last, Math.max(view.first, startTime));
 
+  // Which model run the map shows (local time and UTC cycle) and when its
+  // frames were built; updated whenever the model changes.
   function renderRunInfo(): void {
     const runDate = new Date(view.runTime);
+    const cycle = `${runDate.getUTCDate()}일 ${String(runDate.getUTCHours()).padStart(2, "0")}Z`;
     const days = Math.round(((view.last - view.runTime) / HOUR / 24) * 10) / 10;
-    $("#run").textContent = `${view.run.manifest.title} · ${runDate.getUTCDate()}일 ${String(runDate.getUTCHours()).padStart(2, "0")}Z 실행 · ${days}일 예보`;
+    const generated = Date.parse(view.run.manifest.generated);
+    $("#run").innerHTML =
+      `<span class="run-main"><strong>${MODELS[state.model]?.name ?? view.label}</strong> ${runFormat.format(runDate)} 기준 (${cycle}) · ${days}일 예보</span>` +
+      (Number.isFinite(generated) ? `<span class="run-updated">업데이트 ${updatedFormat.format(generated)}</span>` : "");
+    $("#run").title = view.run.manifest.title;
   }
   renderRunInfo();
   $("#status").textContent = "";
@@ -229,7 +271,7 @@ async function start(): Promise<void> {
 
   const field = new FieldLayer();
   await new Promise<void>((resolve) => map.once("load", () => resolve()));
-  map.addLayer(field, "coast");
+  map.addLayer(field, FIRST_LINE_LAYER);
   const particles = new WindParticles(map);
 
   // City labels with the current value of the selected map.
@@ -666,7 +708,7 @@ async function start(): Promise<void> {
     const overlay = OVERLAYS.find((o) => o.id === "fires")!;
     try {
       map.addSource(id, { type: "raster", tileSize: 256, ...(await overlay.tiles()) });
-      map.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": overlay.opacity } }, "coast");
+      map.addLayer({ id, type: "raster", source: id, paint: { "raster-opacity": overlay.opacity } }, FIRST_LINE_LAYER);
     } catch (error) {
       state.fires = false;
       renderMenus();
@@ -709,7 +751,12 @@ async function start(): Promise<void> {
     setSidebar(open);
   });
 
-  // Model switch.
+  // Model switch. On phones it sits above the timeline, whose height changes
+  // with the clock text and legend.
+  const timelineElement = $(".timeline");
+  new ResizeObserver(() =>
+    document.documentElement.style.setProperty("--timeline-height", `${timelineElement.offsetHeight}px`),
+  ).observe(timelineElement);
   const modelSwitch = $("#model-switch");
   function renderModelSwitch(): void {
     modelSwitch.hidden = models.length < 2;
@@ -787,7 +834,13 @@ async function start(): Promise<void> {
     const url = location.href;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Typhoon Lens", url });
+        sharing = true;
+        try {
+          await navigator.share({ title: "Typhoon Lens", url });
+        } finally {
+          // Let the visibilitychange that follows the sheet see the flag.
+          setTimeout(() => (sharing = false), 1000);
+        }
         return;
       }
       await navigator.clipboard.writeText(url);
@@ -903,6 +956,7 @@ async function start(): Promise<void> {
   updateCoordinates();
 
   function writeHash(): void {
+    if (reloading) return;
     const center = map.getCenter();
     const params = new URLSearchParams({
       model: state.model,
