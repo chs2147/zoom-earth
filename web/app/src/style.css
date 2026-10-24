@@ -592,6 +592,10 @@ a:focus-visible {
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
 }
 
+.place.place-hidden {
+  display: none;
+}
+
 .landmarks-on .place-landmark {
   display: block;
 }

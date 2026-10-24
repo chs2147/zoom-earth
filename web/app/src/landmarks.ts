@@ -3,22 +3,8 @@
 // shadow and base plate at the bottom, the landmark above, lit from the
 // upper left with a darker right side.
 
-const SHADOW = `<ellipse cx="60" cy="106" rx="44" ry="8" fill="#000" opacity=".35"/>`;
-
-function plate(side: string, top: string): string {
-  return `${SHADOW}<path d="M20 98v6a40 10 0 0 0 80 0v-6Z" fill="${side}"/><ellipse cx="60" cy="98" rx="40" ry="10" fill="${top}"/>`;
-}
-
-const GRASS = plate("#2f4a33", "#5b8a52");
-const WATER =
-  plate("#1f4f80", "#3d86c6") +
-  `<path d="M30 100h10M72 103h12M50 105h8M84 96h6" stroke="#8cc4f0" stroke-width="1.5" stroke-linecap="round"/>`;
-const SAND = plate("#b8995c", "#e8d29b");
-const PAVED = plate("#3c4148", "#767b84");
-
-const PALM = (x: number) =>
-  `<path d="M${x} 96q2-22 6-40" stroke="#8b5a2b" stroke-width="3.5" fill="none" stroke-linecap="round"/>` +
-  `<path d="M${x + 6} 56q-12-4-18 4q10-2 18-4Zm0 0q10-8 18-4q-10 0-18 4Zm0 0q-6-12-16-12q8 4 16 12Zm0 0q4-12 14-12q-8 4-14 12Z" fill="#3f8f4f"/>`;
+import { GRASS, PALM, PAVED, SAND, WATER } from "./landmarkParts";
+import { WORLD_ICONS } from "./landmarkWorld";
 
 export interface Landmark {
   name: string;
@@ -270,7 +256,7 @@ const icons: Record<string, [string, string]> = {
 };
 
 export const LANDMARKS: Record<string, Landmark> = Object.fromEntries(
-  Object.entries(icons).map(([city, [name, body]]) => [
+  Object.entries({ ...icons, ...WORLD_ICONS }).map(([city, [name, body]]) => [
     city,
     { name, svg: `<svg viewBox="0 0 120 120" aria-hidden="true">${body}</svg>` },
   ]),
@@ -280,9 +266,12 @@ export const LANDMARKS: Record<string, Landmark> = Object.fromEntries(
 // to 100 px and rounds down, so that is under 3000 m per pixel.
 const MAX_METERS_PER_PIXEL = 3000;
 
+export function metersPerPixel(zoom: number, latitude: number): number {
+  return (40075016.686 * Math.cos((latitude * Math.PI) / 180)) / (512 * 2 ** zoom);
+}
+
 export function landmarksVisible(zoom: number, latitude: number): boolean {
-  const metersPerPixel = (40075016.686 * Math.cos((latitude * Math.PI) / 180)) / (512 * 2 ** zoom);
-  return metersPerPixel < MAX_METERS_PER_PIXEL;
+  return metersPerPixel(zoom, latitude) < MAX_METERS_PER_PIXEL;
 }
 
 // Icon size grows from 48 px at the threshold to 64 px two zoom levels in.
