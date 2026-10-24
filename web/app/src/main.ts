@@ -2,7 +2,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
 
-import { baseStyle, configureOverlays, FIRST_LINE_LAYER, OVERLAYS, PLACES } from "./basemap";
+import { baseStyle, configureOverlays, FIRST_LINE_LAYER, OVERLAYS, PLACES, PLACES_TIER2 } from "./basemap";
 import {
   loadIndex,
   loadLatestRun,
@@ -14,7 +14,7 @@ import {
   type Track,
 } from "./data";
 import { FieldLayer } from "./fieldLayer";
-import { LANDMARKS, landmarkSize, landmarksVisible } from "./landmarks";
+import { LANDMARKS, landmarkSize, landmarksVisible, metersPerPixel } from "./landmarks";
 import { FrameCache, sampleFrame, type Frame } from "./frames";
 import { cssGradient, SCALES, scaleCoordinate } from "./palettes";
 import { WindParticles } from "./particles";
@@ -319,7 +319,11 @@ async function start(): Promise<void> {
 
   // City labels with the current value of the selected map, and a miniature
   // landmark above the name once zoomed in to a 200 km scale or closer.
-  const places = PLACES.map(([name, lat, lon]) => {
+  // Tier-2 cities appear once zoomed in a little (under TIER2_MAX_MPP metres
+  // per pixel) wherever they do not overlap a label already placed.
+  const TIER2_MAX_MPP = 10000;
+  const cities = [...PLACES.map((p) => [...p, 1] as const), ...PLACES_TIER2.map((p) => [...p, 2] as const)];
+  const places = cities.map(([name, lat, lon, tier]) => {
     const element = document.createElement("div");
     element.className = "place";
     const landmark = LANDMARKS[name];
@@ -327,8 +331,34 @@ async function start(): Promise<void> {
       (landmark ? `<span class="place-landmark" title="${landmark.name}">${landmark.svg}</span>` : "") +
       `<span class="place-name">${name}</span><span class="place-value" hidden></span>`;
     new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat([lon, lat]).addTo(map);
-    return { lat, lon, value: element.querySelector<HTMLElement>(".place-value")! };
+    return { lat, lon, tier, element, value: element.querySelector<HTMLElement>(".place-value")! };
   });
+
+  function layoutPlaces(): void {
+    const showTier2 = metersPerPixel(map.getZoom(), map.getCenter().lat) < TIER2_MAX_MPP;
+    for (const place of places) if (place.tier === 2) place.element.classList.toggle("place-hidden", !showTier2);
+    if (!showTier2) return;
+    // Measure every label in one layout pass, then keep tier-2 labels that
+    // clear the ones placed before them (tier 1 first, then list order).
+    const boxes = places.map((place) => place.element.getBoundingClientRect());
+    const placed: DOMRect[] = [];
+    const gap = 4;
+    places.forEach((place, i) => {
+      const box = boxes[i];
+      const hit =
+        place.tier === 2 &&
+        placed.some(
+          (other) =>
+            box.left < other.right + gap &&
+            other.left < box.right + gap &&
+            box.top < other.bottom + gap &&
+            other.top < box.bottom + gap,
+        );
+      if (place.tier === 2) place.element.classList.toggle("place-hidden", hit);
+      if (!hit && box.width > 0) placed.push(box);
+    });
+  }
+  map.on("moveend", layoutPlaces);
 
   const mapContainer = map.getContainer();
   function updateLandmarks(): void {
@@ -338,8 +368,9 @@ async function start(): Promise<void> {
     mapContainer.classList.toggle("landmarks-on", on);
     if (on) mapContainer.style.setProperty("--landmark-size", `${landmarkSize(zoom, lat)}px`);
   }
-  map.on("move", updateLandmarks);
   updateLandmarks();
+  layoutPlaces();
+  map.on("move", updateLandmarks);
 
   const landmarkToggle = $<HTMLInputElement>("#landmark-toggle");
   landmarkToggle.checked = settings.landmarks;
@@ -347,21 +378,38 @@ async function start(): Promise<void> {
     settings.landmarks = landmarkToggle.checked;
     saveSettings(settings);
     updateLandmarks();
+    layoutPlaces();
   });
+
+  // Labels change size when a value appears, disappears or changes length;
+  // re-check tier-2 overlaps once per frame when that happens.
+  let layoutFrame = 0;
+  function scheduleLayout(): void {
+    if (!layoutFrame) {
+      layoutFrame = requestAnimationFrame(() => {
+        layoutFrame = 0;
+        layoutPlaces();
+      });
+    }
+  }
 
   function updatePlaceValues(): void {
     const layer = currentLayer();
+    let resized = false;
     for (const place of places) {
+      const before = place.value.hidden ? -1 : (place.value.textContent ?? "").length;
       if (!layer || !state.frames) {
         place.value.hidden = true;
-        continue;
+      } else {
+        const a = sampleFrame(state.frames[0], layer, place.lon, place.lat);
+        const b = sampleFrame(state.frames[1], layer, place.lon, place.lat);
+        const text = shortValue(layer, a.map((v, k) => v + (b[k] - v) * state.ratio), settings);
+        place.value.textContent = text;
+        place.value.hidden = text === "";
       }
-      const a = sampleFrame(state.frames[0], layer, place.lon, place.lat);
-      const b = sampleFrame(state.frames[1], layer, place.lon, place.lat);
-      const text = shortValue(layer, a.map((v, k) => v + (b[k] - v) * state.ratio), settings);
-      place.value.textContent = text;
-      place.value.hidden = text === "";
+      if ((place.value.hidden ? -1 : (place.value.textContent ?? "").length) !== before) resized = true;
     }
+    if (resized) scheduleLayout();
   }
 
   // Model storm tracks (thin, dotted) and official warnings (bold, coloured by class).
